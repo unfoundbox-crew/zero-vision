@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.tsbuildinfo
+native/.build/
+.env
+.DS_Store
+*.mov
+*.mp4
+!fixtures/video/*.mp4
