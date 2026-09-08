@@ -1,0 +1,22 @@
+[
+  {
+    "nodeId": "1",
+    "role": { "value": "RootWebArea" },
+    "name": { "value": "Tiny" },
+    "childIds": ["2", "3"]
+  },
+  {
+    "nodeId": "2",
+    "role": { "value": "heading" },
+    "name": { "value": "Hello" },
+    "properties": [{ "name": "level", "value": { "value": 1 } }],
+    "childIds": []
+  },
+  {
+    "nodeId": "3",
+    "role": { "value": "link" },
+    "name": { "value": "Docs" },
+    "properties": [{ "name": "url", "value": { "value": "https://example.com" } }],
+    "childIds": []
+  }
+]
