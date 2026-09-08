@@ -60,6 +60,20 @@ Default debug ports: `1948`, then `9223`. Never `9222` unless `--port 9222` or `
 
 Prefer these over a screenshot when the goal is to read text. Use `apple-vision` unless the user asked to describe.
 
+Agent skill: `npx skills add unfoundbox-crew/zero-vision -g`
+
+## Who consumes this
+
+Standalone repo. Other crew products call it; they do not own it.
+
+| Project | Job |
+| --- | --- |
+| MotionVector / `mvec` | Contact sheets, title cards, "what does this frame say" after `mvec frame` |
+| AgentWorth | The 92% of visual sessions that are transcription, not taste |
+| SpacePilot | Optional `--engine local-vlm` when weights are already on disk |
+
+Photos of a room → classical CV → SDF block-out is MotionVector. This tool stops at text (and, if named, a local/cloud VLM).
+
 ## v1 limits
 
 `local-vlm` and `cloud-vlm` are fail-closed: they check weights/key and refuse to spawn or POST. Contact sheets are one image, not a split grid. Video OCR needs the native binary.
