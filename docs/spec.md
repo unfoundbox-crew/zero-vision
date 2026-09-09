@@ -376,7 +376,7 @@ Tool descriptions must say **prefer this over a screenshot when the goal is to r
 
 ## 11. Repository and build
 
-Standalone repo, MIT. This spec stays the design of record until that repo's README points here.
+Standalone repo, Apache-2.0. This spec is the design of record.
 
 ```text
 zero-vision/

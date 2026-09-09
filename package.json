@@ -1,0 +1,39 @@
+{
+  "name": "zero-vision",
+  "version": "0.1.0",
+  "description": "Read a page, a screenshot, or a video as text. Default path never sends pixels off the machine.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "bin": {
+    "zrv": "./dist/cli.js",
+    "zrv-mcp": "./dist/mcp.js",
+    "snap": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "docs/spec.md",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "native": "swift build -c release --package-path native --product zrv-native",
+    "test": "tsc && node --test dist/test/*.js",
+    "zrv": "node dist/cli.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/unfoundbox-crew/zero-vision.git"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "typescript": "^5.8.2"
+  }
+}

@@ -1,0 +1,98 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  version-gate:
+    name: Version consistency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tag and package.json must agree
+        shell: bash
+        run: |
+          TAG=${GITHUB_REF_NAME#v}
+          NPM=$(node -p "require('./package.json').version")
+          echo "tag=$TAG npm=$NPM"
+          [ "$TAG" = "$NPM" ] || { echo "::error::tag $TAG != package.json $NPM"; exit 1; }
+
+  build-test:
+    name: Build and test
+    needs: version-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+
+  publish-npm:
+    name: Publish to NPM
+    needs: build-test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # required for OIDC / trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Ensure npm supports trusted publishing
+        run: |
+          npm install -g npm@latest
+          node -e '
+            const v = require("child_process").execSync("npm --version").toString().trim().split(".").map(Number);
+            const ok = v[0] > 11 || (v[0] === 11 && (v[1] > 5 || (v[1] === 5 && v[2] >= 1)));
+            if (!ok) { console.error("::error::npm >= 11.5.1 required for trusted publishing"); process.exit(1); }
+            console.log("npm version OK for trusted publishing");
+          '
+
+      # No NPM_TOKEN. The npm CLI detects the OIDC environment and exchanges the
+      # GitHub identity token for a short-lived npm credential.
+      # Requires a Trusted Publisher configured on npmjs.com for:
+      #   org/user: <npm owner of zero-vision> · repo: unfoundbox-crew/zero-vision · workflow: release.yml
+      - name: Publish package to NPM (trusted publishing / OIDC)
+        run: |
+          if ! npm publish --access public 2>&1 | tee /tmp/publish.log; then
+            if grep -qiE "trusted publisher|oidc|not configured" /tmp/publish.log; then
+              echo "::error::Trusted Publisher is not configured on npmjs.com."
+              echo "::error::Add one for the zero-vision package: Settings -> Trusted Publisher"
+              echo "::error::  repo: unfoundbox-crew/zero-vision, workflow: release.yml"
+            fi
+            exit 1
+          fi
+
+  smoke-test:
+    name: Smoke test
+    needs: publish-npm
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - run: |
+          sleep 30
+          npx -y zero-vision --help 2>&1 | head -8
+          npm view zero-vision version
