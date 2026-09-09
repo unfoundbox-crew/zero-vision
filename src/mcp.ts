@@ -17,15 +17,27 @@ function engineOf(args: Record<string, unknown> | undefined): EngineId {
   return resolveEngine();
 }
 
-export async function startMcp(): Promise<void> {
-  const server = new Server({ name: "zero-vision", version: "0.1.0" }, { capabilities: { tools: {} } });
+function langOf(args: Record<string, unknown> | undefined): string[] | undefined {
+  const l = args?.lang;
+  if (Array.isArray(l)) return l.filter((x): x is string => typeof x === "string");
+  if (typeof l === "string") return [l];
+  return undefined;
+}
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: [
+function levelOf(args: Record<string, unknown> | undefined): "accurate" | "fast" | undefined {
+  return args?.level === "fast" ? "fast" : args?.level === "accurate" ? "accurate" : undefined;
+}
+
+function portOf(args: Record<string, unknown> | undefined): number | undefined {
+  return typeof args?.port === "number" && Number.isFinite(args.port) ? args.port : undefined;
+}
+
+export function listMcpTools() {
+  return [
       {
         name: "peek_tabs",
         description: "List open debug-Chrome tabs. Prefer this over a screenshot when the goal is to read a page.",
-        inputSchema: { type: "object", properties: {} },
+        inputSchema: { type: "object", properties: { port: { type: "number" } } },
       },
       {
         name: "peek_page",
@@ -41,6 +53,9 @@ export async function startMcp(): Promise<void> {
             fetch: { type: "boolean", default: false },
             ocrOpaque: { type: "boolean", default: false },
             waitMs: { type: "number" },
+            waitText: { type: "string" },
+            scroll: { type: "boolean", default: false },
+            port: { type: "number" },
             engine: { type: "string", enum: ["apple-vision", "apple-fm", "local-vlm", "cloud-vlm"] },
           },
         },
@@ -53,6 +68,8 @@ export async function startMcp(): Promise<void> {
           properties: {
             targetId: { type: "string" },
             url: { type: "string" },
+            navigate: { type: "boolean", default: false },
+            port: { type: "number" },
             verbose: { type: "boolean" },
             engine: { type: "string" },
           },
@@ -71,6 +88,7 @@ export async function startMcp(): Promise<void> {
             engine: { type: "string", enum: ["apple-vision", "apple-fm", "local-vlm", "cloud-vlm"] },
             task: { type: "string", enum: ["transcribe", "describe"], default: "transcribe" },
             level: { type: "string", enum: ["accurate", "fast"] },
+            lang: { type: "array", items: { type: "string" } },
           },
         },
       },
@@ -85,17 +103,27 @@ export async function startMcp(): Promise<void> {
             interval: { type: "number" },
             maxFrames: { type: "number" },
             engine: { type: "string" },
+            task: { type: "string", enum: ["transcribe", "describe"], default: "transcribe" },
+            level: { type: "string", enum: ["accurate", "fast"] },
+            lang: { type: "array", items: { type: "string" } },
           },
         },
       },
-    ],
+    ];
+}
+
+export async function startMcp(): Promise<void> {
+  const server = new Server({ name: "zero-vision", version: "0.1.0" }, { capabilities: { tools: {} } });
+
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: listMcpTools(),
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
     const args = (req.params.arguments ?? {}) as Record<string, unknown>;
     switch (req.params.name) {
       case "peek_tabs": {
-        const { port } = await findOpenPort();
+        const { port } = await findOpenPort(portOf(args));
         const tabs = await listTabs(port);
         return text(JSON.stringify({ port, tabs }, null, 2));
       }
@@ -105,6 +133,7 @@ export async function startMcp(): Promise<void> {
           return text(args.format === "markdown" ? markdown : t);
         }
         const attached = await attach({
+          port: portOf(args),
           tab: typeof args.targetId === "string" ? args.targetId : undefined,
           url: typeof args.url === "string" ? args.url : undefined,
           navigate: Boolean(args.navigate),
@@ -112,6 +141,8 @@ export async function startMcp(): Promise<void> {
         try {
           const extracted = await extractPage(attached.client, attached.sessionId, {
             waitMs: typeof args.waitMs === "number" ? args.waitMs : undefined,
+            waitText: typeof args.waitText === "string" ? args.waitText : undefined,
+            scroll: Boolean(args.scroll),
           });
           let body = args.format === "markdown" ? extracted.markdown : extracted.text;
           if (args.ocrOpaque && extracted.opaque.fraction >= 0.3) {
@@ -133,8 +164,10 @@ export async function startMcp(): Promise<void> {
       }
       case "peek_a11y": {
         const attached = await attach({
+          port: portOf(args),
           tab: typeof args.targetId === "string" ? args.targetId : undefined,
           url: typeof args.url === "string" ? args.url : undefined,
+          navigate: Boolean(args.navigate),
         });
         try {
           const extracted = await extractPage(attached.client, attached.sessionId, {
@@ -148,17 +181,19 @@ export async function startMcp(): Promise<void> {
       case "ocr_image": {
         const engine = engineOf(args);
         const task = args.task === "describe" ? "describe" : "transcribe";
+        const level = levelOf(args);
+        const lang = langOf(args);
         if (args.clipboard) {
-          const r = await perceive(engine, { kind: "clipboard", task });
+          const r = await perceive(engine, { kind: "clipboard", task, level, lang });
           return text(JSON.stringify(r));
         }
         if (typeof args.base64 === "string") {
           const buf = Buffer.from(args.base64, "base64");
-          const r = await perceive(engine, { kind: "image", bytes: buf, task });
+          const r = await perceive(engine, { kind: "image", bytes: buf, task, level, lang });
           return text(JSON.stringify(r));
         }
         if (typeof args.path !== "string") throw new Error("path, base64, or clipboard required");
-        const r = await perceive(engine, { kind: "image", path: args.path, task });
+        const r = await perceive(engine, { kind: "image", path: args.path, task, level, lang });
         return text(JSON.stringify(r));
       }
       case "ocr_video": {
@@ -167,6 +202,9 @@ export async function startMcp(): Promise<void> {
         const r = await perceive(engine, {
           kind: "video",
           path: args.path,
+          task: args.task === "describe" ? "describe" : "transcribe",
+          level: levelOf(args),
+          lang: langOf(args),
           video: {
             mode: (args.mode as "scene" | "interval" | "all-idr") ?? "scene",
             interval: typeof args.interval === "number" ? args.interval : 2,

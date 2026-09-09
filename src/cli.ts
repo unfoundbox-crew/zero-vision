@@ -24,7 +24,7 @@ function usage(): never {
   process.stderr.write(`zrv — read a page, a screenshot, or a video as text
   zrv [--md|--a11y] [--tab id] [--url u] [--engine e] [--json]
   zrv --tabs
-  zrv ocr <file> [--engine e] [--task transcribe|describe]
+  zrv ocr <file> [--engine e] [--task transcribe|describe] [--mode scene|interval|all-idr] [--interval s] [--max-frames n]
   zrv snap [--ocr] [--save path]
   zrv mcp
 `);
@@ -135,12 +135,23 @@ async function main(): Promise<void> {
     }
     if (!file) usage();
     const kind = isVideo(file) ? "video" : "image";
+    const modeRaw = typeof flags.mode === "string" ? flags.mode : "scene";
+    const mode = modeRaw === "interval" || modeRaw === "all-idr" ? modeRaw : "scene";
     const result = await perceive(engine, {
       kind,
       path: file,
       task,
       level: flags.level === "fast" ? "fast" : "accurate",
       lang: langs.length ? langs : undefined,
+      ...(kind === "video"
+        ? {
+            video: {
+              mode,
+              interval: flags.interval ? Number(flags.interval) : 2,
+              maxFrames: flags["max-frames"] ? Number(flags["max-frames"]) : 60,
+            },
+          }
+        : {}),
     });
     outResult(result, Boolean(flags.json));
   }
