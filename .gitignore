@@ -8,3 +8,6 @@ native/.build/
 *.mov
 *.mp4
 !fixtures/video/*.mp4
+
+# tesseract.js traineddata cache (test/CLI runs)
+*.traineddata
