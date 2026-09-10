@@ -6,6 +6,11 @@ versioning follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- `tesseract` engine: pure-npm OCR (tesseract.js) with system-binary
+  fast path, clipboard via wl-paste/xclip, ffmpeg video keyframes.
+  Default pixel engine on Linux.
+
 ## [0.1.0] - 2026-09-10
 
 First release. Read a page, a screenshot, or a video as text —
