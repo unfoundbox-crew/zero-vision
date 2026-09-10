@@ -22,10 +22,10 @@ async function withEnv<T>(kv: Record<string, string | undefined>, fn: () => T | 
   }
 }
 
-test("default engine is apple-vision", async () => {
+test("default engine follows platform (apple-vision, tesseract on linux)", async () => {
   const home = mkdtempSync(join(tmpdir(), "zrv-home-"));
   await withEnv({ ZEROVISION_ENGINE: undefined, HOME: home }, () => {
-    assert.equal(resolveEngine(), "apple-vision");
+    assert.equal(resolveEngine(), process.platform === "linux" ? "tesseract" : "apple-vision");
   });
 });
 
