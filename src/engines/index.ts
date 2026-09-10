@@ -72,7 +72,9 @@ export function resolveEngine(cli?: string): EngineId {
   const cfg = loadConfig().engine;
   if (cfg && isEngineId(cfg)) return cfg;
   // Linux has no Apple frameworks: tesseract is the local default there.
+  // Same on Intel Macs, where the arm64 native binary cannot run.
   if (process.platform === "linux") return "tesseract";
+  if (process.platform === "darwin" && process.arch === "x64") return "tesseract";
   return "apple-vision";
 }
 
