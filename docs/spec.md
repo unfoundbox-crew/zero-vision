@@ -244,6 +244,22 @@ This is the 8% aesthetic path when the user wants frontier quality. Creative dir
 
 ---
 
+### 5.6 `tesseract` (Linux OCR)
+
+Pure-npm OCR via tesseract.js — no apt, no system daemon. Default pixel
+engine on Linux, same `PerceiveInput` (`task`, `lang`, `level`) as
+`apple-vision`. `level: fast` downsamples long side to 1600px first.
+
+When a system `tesseract` binary is on PATH, prefer it (same engine id,
+faster, same output contract) and note `backend: "system"` vs `"wasm"`
+in stderr. Either way the rank holds: local first, never cloud unless named.
+
+Video on Linux is ffmpeg (optional dep): scene/interval keyframe extract,
+then this engine per frame. Missing ffmpeg fails closed with the install
+hint, mirroring the missing-native exit 3.
+
+---
+
 ## 6. Native packaging (`apple-vision` binary)
 
 Ship a **compiled executable**, not a dylib, not a `.node` addon, not `swift-sh`.

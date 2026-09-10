@@ -57,6 +57,10 @@ jobs:
           node-version: 24
           registry-url: 'https://registry.npmjs.org'
 
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+
       - name: Ensure npm supports trusted publishing
         run: |
           npm install -g npm@latest
@@ -73,6 +77,8 @@ jobs:
       #   org/user: <npm owner of zero-vision> · repo: unfoundbox-crew/zero-vision · workflow: release.yml
       - name: Publish package to NPM (trusted publishing / OIDC)
         run: |
+          # pipefail: without it, tee's exit code masks a publish failure green
+          set -o pipefail
           if ! npm publish --access public 2>&1 | tee /tmp/publish.log; then
             if grep -qiE "trusted publisher|oidc|not configured" /tmp/publish.log; then
               echo "::error::Trusted Publisher is not configured on npmjs.com."
