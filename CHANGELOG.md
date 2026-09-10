@@ -6,15 +6,21 @@ versioning follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
-### Added
-- `tesseract` engine: pure-npm OCR (tesseract.js) with system-binary
-  fast path, clipboard via wl-paste/xclip, ffmpeg video keyframes.
-  Default pixel engine on Linux.
+## [0.1.1] - 2026-09-10
+
+### Fixed
+- Correct release notes: the `tesseract` engine and Intel-Mac default
+  shipped in 0.1.0; notes said Unreleased.
 
 ## [0.1.0] - 2026-09-10
 
 First release. Read a page, a screenshot, or a video as text —
 default path never sends pixels off the machine.
+
+### Added
+- `tesseract` engine: pure-npm OCR (tesseract.js) with system-binary
+  fast path, clipboard via wl-paste/xclip, ffmpeg video keyframes.
+  Default pixel engine on Linux and Intel Macs.
 
 ### Added
 - CLI (`zrv`): attached-tab text / markdown / AX, `--tabs`, `--url`
