@@ -36,6 +36,81 @@ npm install && npm run build && npm run native
 
 `npm run native` builds `zrv-native` (Vision OCR). Without it, CDP still works; `zrv ocr` exits 3.
 
+## Design
+
+```
+                    ┌──────────────┐          ┌───────────────┐
+                    │  CLI  (zrv)  │          │ MCP (zrv mcp) │
+                    │ page · ocr   │          │ peek_* · ocr_*│
+                    │ tabs · snap  │          │   5 tools     │
+                    └──────┬───────┘          └───────┬───────┘
+                           │                        │
+                           ▼                        ▼
+                ┌──────────────────────────────────────────┐
+                │               perceive()                 │
+                │        task: transcribe | describe       │
+                └───────┬──────────────────────┬───────────┘
+                        │                      │
+           ┌────────────▼────────┐  ┌──────────▼──────────────┐
+           │  CDP (attach-only)  │  │  pixel engines (ranked, │
+           │  text · md · AX     │  │  fail-closed)           │
+           │  never launch       │  │                         │
+           │  never 9222         │  │  1 apple-vision  (OCR)  │
+           │  opaque ≥30% ──► OCR│  │  2 apple-fm   (judge)   │
+           └─────────────────────┘  │  3 local-vlm (weights   │
+                                    │    must be on disk)     │
+                                    │  4 cloud-vlm (named     │
+                                    │    opt-in only)         │
+                                    └──────────┬──────────────┘
+                                               │
+                                  ┌────────────▼────────────┐
+                                  │  zrv-native (Swift)     │
+                                  │  Vision · AVFoundation  │
+                                  │  video keyframes        │
+                                  └─────────────────────────┘
+
+  Invariants: no silent cloud fallback · contact sheet = one image,
+  never split · snap stays CLI-only · not a browser driver.
+```
+
+## How it compares
+
+```
+┌───────────────────┬──────────┬────────┬────────┬────────┬────────────────────────────┐
+│ Tool              │ No-pixel │ Local  │ Video  │ Drives │ Catch                      │
+│                   │ text     │ OCR    │ text   │ browser│                            │
+├───────────────────┼──────────┼────────┼────────┼────────┼────────────────────────────┤
+│ zero-vision (own) │ yes      │ yes    │ yes    │ no     │ macOS + Apple silicon      │
+│ Playwright MCP    │ AX tree  │ no     │ no     │ yes    │ pays vision for pixels     │
+│ Chrome DevTools   │ AX tree  │ no     │ no     │ yes    │ same; traces cost extra    │
+│ Stagehand         │ AX + LLM │ no     │ no     │ yes    │ LLM call per extract       │
+│ Crawl4AI          │ HTML     │ no     │ no     │ crawl  │ rendered HTML, no OCR      │
+│ Browser-Use       │ hybrid   │ no     │ no     │ yes    │ still pays vision often    │
+│ ocrtool-mcp       │ n/a      │ yes    │ no     │ no     │ images only, no tab read   │
+│ Frontier VLM shot │ no       │ no     │ frames │ no     │ $$$ per image, off-machine │
+│ agy Flash         │ n/a      │ no     │ no     │ no     │ cheap but cloud + ~20s lag │
+└───────────────────┴──────────┴────────┴────────┴────────┴────────────────────────────┘
+```
+
+zero-vision is free per call, private by default, and deterministic —
+but pixels need macOS + Apple silicon (see Linux below), it never clicks
+by design, and it is 0.1.0, unproven at scale.
+
+## Linux
+
+CDP text works anywhere Node 22 runs. The pixel side swaps backends:
+
+| Need              | macOS               | Linux                                  |
+| ----------------- | ------------------- | -------------------------------------- |
+| OCR               | Apple Vision        | `tesseract` engine (tesseract.js, pure npm) |
+| OCR speed path    | ANE                 | system `tesseract` binary when present |
+| Describe / judge  | apple-fm            | `local-vlm` at Ollama / llama.cpp      |
+| Video keyframes   | AVFoundation        | ffmpeg (optional, fail-closed)         |
+| `snap` capture    | `screencapture`     | grim (Wayland) / scrot (X11)           |
+| Clipboard         | pbcopy              | xclip / wl-copy                        |
+
+Same `perceive()` interface, same rank order, same fail-closed rules.
+
 ## Commands
 
 ```text
