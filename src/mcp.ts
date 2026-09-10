@@ -4,7 +4,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { perceive, resolveEngine, isEngineId, type EngineId } from "./engines/index.js";
 import { attach, findOpenPort, listTabs } from "./cdp/attach.js";
-import { captureScreenshot, extractPage, fetchUrl } from "./cdp/extract.js";
+import { captureScreenshot, extractPage, extractSelector, fetchUrl } from "./cdp/extract.js";
 
 const text = (s: string) => ({ content: [{ type: "text" as const, text: s }] });
 
@@ -55,6 +55,7 @@ export function listMcpTools() {
             waitMs: { type: "number" },
             waitText: { type: "string" },
             scroll: { type: "boolean", default: false },
+            selector: { type: "string", description: "CSS selector: return only that element's text" },
             port: { type: "number" },
             engine: { type: "string", enum: ["apple-vision", "apple-fm", "local-vlm", "cloud-vlm", "tesseract"] },
           },
@@ -139,6 +140,11 @@ export async function startMcp(): Promise<void> {
           navigate: Boolean(args.navigate),
         });
         try {
+          if (typeof args.selector === "string") {
+            const sel = await extractSelector(attached.client, attached.sessionId, args.selector);
+            if (!sel.found) throw new Error(`no match for selector: ${args.selector}`);
+            return text(JSON.stringify({ title: attached.title, url: attached.url, text: sel.text }));
+          }
           const extracted = await extractPage(attached.client, attached.sessionId, {
             waitMs: typeof args.waitMs === "number" ? args.waitMs : undefined,
             waitText: typeof args.waitText === "string" ? args.waitText : undefined,

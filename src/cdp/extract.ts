@@ -212,6 +212,24 @@ export async function extractPage(
   return { text: walked.text, markdown: walked.markdown, a11y, opaque };
 }
 
+export async function extractSelector(
+  client: CdpClient,
+  sessionId: string,
+  selector: string,
+): Promise<{ text: string; found: boolean }> {
+  await client.send("Runtime.enable", {}, sessionId);
+  const ev = (await client.send(
+    "Runtime.evaluate",
+    {
+      expression: `(s => { const el = document.querySelector(s); return el ? el.innerText : null; })(${JSON.stringify(selector)})`,
+      returnByValue: true,
+    },
+    sessionId,
+  )) as { result?: { value?: string | null } };
+  const text = ev.result?.value ?? "";
+  return { text, found: ev.result?.value != null };
+}
+
 export async function captureScreenshot(client: CdpClient, sessionId: string): Promise<Buffer> {
   const result = (await client.send("Page.captureScreenshot", { format: "png" }, sessionId)) as { data: string };
   if (!result?.data) throw new Error("Page.captureScreenshot returned no data");

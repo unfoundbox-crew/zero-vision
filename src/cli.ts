@@ -2,7 +2,7 @@
 import { spawn } from "node:child_process";
 import { perceive, resolveEngine, type PerceptionResult } from "./engines/index.js";
 import { attach, findOpenPort, listTabs } from "./cdp/attach.js";
-import { captureScreenshot, extractPage, fetchUrl } from "./cdp/extract.js";
+import { captureScreenshot, extractPage, extractSelector, fetchUrl } from "./cdp/extract.js";
 import { interactiveCapture, runScreencapture } from "./snap.js";
 
 const BOOL = new Set([
@@ -23,6 +23,7 @@ const BOOL = new Set([
 function usage(): never {
   process.stderr.write(`zrv — read a page, a screenshot, or a video as text
   zrv [--md|--a11y] [--tab id] [--url u] [--engine e] [--json]
+  zrv --selector <css> [--tab id] [--url u]
   zrv --tabs
   zrv ocr <file> [--engine e] [--task transcribe|describe] [--mode scene|interval|all-idr] [--interval s] [--max-frames n]
   zrv snap [--ocr] [--save path]
@@ -175,6 +176,16 @@ async function main(): Promise<void> {
     url: typeof flags.url === "string" ? flags.url : undefined,
     navigate: Boolean(flags.navigate),
   });
+  if (typeof flags.selector === "string") {
+    const sel = await extractSelector(attached.client, attached.sessionId, flags.selector);
+    attached.client.close();
+    if (!sel.found) {
+      process.stderr.write(`no match for selector: ${flags.selector}\n`);
+      process.exit(2);
+    }
+    process.stdout.write(sel.text + (sel.text.endsWith("\n") ? "" : "\n"));
+    return;
+  }
   process.stderr.write(`${attached.title}\t${attached.url}\n`);
   try {
     const extracted = await extractPage(attached.client, attached.sessionId, {
