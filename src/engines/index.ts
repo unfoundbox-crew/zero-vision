@@ -2,7 +2,7 @@ import { homedir } from "node:os";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-export type EngineId = "apple-vision" | "apple-fm" | "local-vlm" | "cloud-vlm";
+export type EngineId = "apple-vision" | "apple-fm" | "local-vlm" | "cloud-vlm" | "tesseract";
 export type Task = "transcribe" | "describe";
 
 export interface PerceiveInput {
@@ -49,7 +49,7 @@ export interface ZeroVisionConfig {
   };
 }
 
-const ENGINES: EngineId[] = ["apple-vision", "apple-fm", "local-vlm", "cloud-vlm"];
+const ENGINES: EngineId[] = ["apple-vision", "apple-fm", "local-vlm", "cloud-vlm", "tesseract"];
 
 export function isEngineId(s: string): s is EngineId {
   return (ENGINES as string[]).includes(s);
@@ -71,6 +71,8 @@ export function resolveEngine(cli?: string): EngineId {
   if (env && isEngineId(env)) return env;
   const cfg = loadConfig().engine;
   if (cfg && isEngineId(cfg)) return cfg;
+  // Linux has no Apple frameworks: tesseract is the local default there.
+  if (process.platform === "linux") return "tesseract";
   return "apple-vision";
 }
 
@@ -102,6 +104,10 @@ export async function perceive(engine: EngineId, input: PerceiveInput): Promise<
     case "cloud-vlm": {
       const { cloudVlm } = await import("./cloud/index.js");
       return cloudVlm.perceive(input);
+    }
+    case "tesseract": {
+      const { tesseract } = await import("./tesseract.js");
+      return tesseract.perceive(input);
     }
   }
 }
