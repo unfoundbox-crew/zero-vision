@@ -18,6 +18,13 @@ test("ocr image keeps lang and level", () => {
   assert.equal(p.flags.level, "fast");
 });
 
+test("--selector takes a css value", () => {
+  const p = parseArgv(["--selector", "main article", "--tab", "abc"]);
+  assert.equal(p.cmd, "page");
+  assert.equal(p.flags.selector, "main article");
+  assert.equal(p.flags.tab, "abc");
+});
+
 test("mcp tools cover cli parity params", () => {
   const tools = listMcpTools();
   const byName = Object.fromEntries(tools.map((t) => [t.name, t.inputSchema.properties as Record<string, unknown>]));
@@ -25,6 +32,7 @@ test("mcp tools cover cli parity params", () => {
   assert.ok(byName.peek_page.port, "peek_page needs port");
   assert.ok(byName.peek_page.scroll, "peek_page needs scroll");
   assert.ok(byName.peek_page.waitText, "peek_page needs waitText");
+  assert.ok(byName.peek_page.selector, "peek_page needs selector");
   assert.ok(byName.peek_a11y.port, "peek_a11y needs port");
   assert.ok(byName.peek_a11y.navigate, "peek_a11y needs navigate");
   assert.ok(byName.ocr_image.lang, "ocr_image needs lang");

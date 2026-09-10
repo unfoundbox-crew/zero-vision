@@ -32,6 +32,7 @@ Do not use this to click, type, or drive a browser. Chrome DevTools MCP and Play
 ```bash
 zrv                         # chosen debug-Chrome tab as text
 zrv --tabs
+zrv --selector <css>              # element text only (the canary-text port)
 zrv ocr shot.png [--lang en-US] [--level fast]
 zrv ocr sheet.png           # contact sheet: one image, do not split the grid
 zrv ocr clip.mp4 [--mode scene|interval|all-idr] [--interval 2] [--max-frames 60]

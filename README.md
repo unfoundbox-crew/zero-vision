@@ -118,6 +118,7 @@ zrv                  text of the chosen debug-Chrome tab
 zrv --md             markdown
 zrv --a11y           interesting AX tree
 zrv --tabs
+zrv --selector <css>              # element text only (the canary-text port)
 zrv --url <url> [--navigate|--fetch]
 zrv ocr <file.png|jpg|heic|pdf|mp4|mov> [--task transcribe|describe] [--lang en-US] [--level fast|accurate]
 zrv ocr <clip.mp4> [--mode scene|interval|all-idr] [--interval 2] [--max-frames 60]
