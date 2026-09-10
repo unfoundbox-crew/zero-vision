@@ -5,9 +5,9 @@
   "type": "module",
   "license": "Apache-2.0",
   "bin": {
-    "zrv": "./dist/cli.js",
-    "zrv-mcp": "./dist/mcp.js",
-    "snap": "./dist/cli.js"
+    "zrv": "dist/cli.js",
+    "zrv-mcp": "dist/mcp.js",
+    "snap": "dist/cli.js"
   },
   "files": [
     "dist",
