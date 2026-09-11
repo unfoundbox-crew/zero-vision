@@ -1,0 +1,48 @@
+# zero-vision
+
+> Read a page, a screenshot, or a video as text. Default path never sends pixels off the machine.
+
+Full text for this file: [llms-full.txt](./llms-full.txt). Detail sources: [README](../README.md), [SKILL](../SKILL.md), [spec](../docs/spec.md), [CHANGELOG](../CHANGELOG.md), [package.json](../package.json), [license](../LICENSE).
+
+## Install
+
+- Requires macOS, Node 22+, Apple silicon for pixel engines. Linux uses alternate backends, see [spec](../docs/spec.md).
+- `npm install -g zero-vision` puts `zrv` on PATH. The bare name `zrv` is taken on npm, so install `zero-vision` and run `npx zero-vision`, never `npx zrv`. Bins declared in [package.json](../package.json): `zrv`, `zrv-mcp`, `snap`.
+- From a checkout: `npm install && npm run build && npm run native`. `npm run native` builds `zrv-native` (Vision OCR); without it CDP tab reads still work but `zrv ocr` exits 3. See [README](../README.md).
+
+## Commands
+
+- `zrv` returns text of the chosen debug-Chrome tab. Variants: `zrv --md` (markdown), `zrv --a11y` (AX tree), `zrv --tabs` (list tabs), `zrv --selector <css>` (element text only), `zrv --url <url> [--navigate|--fetch]`. Default debug ports `1948` then `9223`; never `9222` unless `--port 9222` or `ZEROVISION_ALLOW_USER_CHROME=1`. See [README](../README.md).
+- `zrv ocr <file.png|jpg|heic|pdf|mp4|mov> [--task transcribe|describe] [--lang en-US] [--level fast|accurate]` reads files. Video flags: `[--mode scene|interval|all-idr] [--interval 2] [--max-frames 60]`. Also `zrv ocr --clipboard` and `zrv ocr --task describe --engine apple-fm`. See [SKILL](../SKILL.md).
+- `zrv snap` is interactive capture to clipboard; `zrv snap --ocr` captures, runs OCR, prints text. `snap` stays CLI-only, per [spec](../docs/spec.md).
+- `zrv mcp` starts the stdio MCP server. Agent skill install: `npx skills add unfoundbox-crew/zero-vision -g`.
+
+## MCP tools
+
+- Server exposes 5 tools: `peek_tabs`, `peek_page`, `peek_a11y`, `ocr_image`, `ocr_video`. See [README](../README.md).
+- Prefer these over a screenshot when the goal is to read text. Use `apple-vision` unless the user asked to describe.
+- CLI/MCP parity: `lang` + `level` on image/video OCR, `port` on tab tools, `scroll` + `waitText` on page reads, `navigate` on AX reads, video tuning on CLI `ocr`. Added in [CHANGELOG](../CHANGELOG.md) 0.1.2.
+- This tool does not click, type, or drive a browser. Chrome DevTools MCP and Playwright MCP already do that. See [SKILL](../SKILL.md).
+
+## Engines
+
+- Rank is cheap and local first; each step is fail-closed, per [spec](../docs/spec.md):
+  1. Chrome AX / cleaned text (attach-only CDP, no click)
+  2. Apple Vision OCR (`apple-vision`, default for files)
+  3. On-device Foundation Model (`apple-fm`)
+  4. Local VLM (`local-vlm`), weights must already be on disk
+  5. Cloud VLM (`cloud-vlm`), opt-in only, never a fallback
+- `local-vlm` and `cloud-vlm` check weights/key and refuse to spawn or POST when absent. No silent cloud fallback. See [README](../README.md).
+- Linux backend swaps documented in [README](../README.md): `tesseract` engine for OCR, `local-vlm` at Ollama / llama.cpp for describe, ffmpeg keyframes, grim/scrot capture.
+- Contact sheets are one image, never split. Video OCR needs the native binary.
+
+## Examples
+
+- `zrv` — text of the current debug-Chrome tab.
+- `zrv --md --selector main` — markdown of the `main` element only.
+- `zrv ocr shot.png --lang en-US --level fast` — transcribe a screenshot.
+- `zrv ocr sheet.png` — read a contact sheet as one image; do not split the grid.
+- `zrv ocr clip.mp4 --mode scene --max-frames 60` — transcribe video keyframes.
+- `zrv ocr --clipboard` — transcribe the clipboard image.
+- `zrv ocr --task describe --engine apple-fm` — one on-device sentence of judgment.
+- `zrv snap --ocr` — capture a region, print its text.
