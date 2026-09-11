@@ -94,7 +94,7 @@ npm install && npm run build && npm run native
 
 zero-vision is free per call, private by default, and deterministic —
 but pixels need macOS + Apple silicon (see Linux below), it never clicks
-by design, and it is 0.1.0, unproven at scale.
+by design, and it is 0.1.2, unproven at scale.
 
 ## Linux
 
@@ -138,6 +138,9 @@ Default debug ports: `1948`, then `9223`. Never `9222` unless `--port 9222` or `
 Prefer these over a screenshot when the goal is to read text. Use `apple-vision` unless the user asked to describe.
 
 Agent skill: `npx skills add unfoundbox-crew/zero-vision -g`
+
+Agent docs: [`docs-agent/llms.txt`](docs-agent/llms.txt) (index) and
+[`docs-agent/llms-full.txt`](docs-agent/llms-full.txt) (full text).
 
 ## Who consumes this
 

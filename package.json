@@ -14,7 +14,10 @@
     "docs/spec.md",
     "README.md",
     "LICENSE",
-    "NOTICE"
+    "NOTICE",
+    "docs-agent/llms.txt",
+    "docs-agent/llms-full.txt",
+    "SKILL.md"
   ],
   "engines": {
     "node": ">=22"
