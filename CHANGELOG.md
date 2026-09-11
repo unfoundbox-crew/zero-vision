@@ -6,6 +6,21 @@ versioning follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-11
+
+### Added
+- Element-scoped reads: `zrv --selector <css>` and `peek_page(selector)`,
+  porting the one thing `canary-text` had that `zrv` lacked.
+- CLI/MCP parity: `lang` + `level` on image/video OCR, `port` on all tab
+  tools, `scroll` + `waitText` on page reads, `navigate` on AX reads,
+  video tuning flags on CLI `ocr`.
+- `examples/`: runnable OCR + CDP walkthroughs with expected outputs.
+
+### Fixed
+- `bin` paths (`dist/...` not `./dist/...`) — npm was stripping all bins.
+- Release workflow builds before publishing; pipefail so failures fail.
+- Global-install docs; README design diagram, comparison table, Linux section.
+
 ## [0.1.1] - 2026-09-10
 
 ### Fixed
