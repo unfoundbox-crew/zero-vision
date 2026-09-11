@@ -1,6 +1,6 @@
 {
   "name": "zero-vision",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Read a page, a screenshot, or a video as text. Default path never sends pixels off the machine.",
   "type": "module",
   "license": "Apache-2.0",
