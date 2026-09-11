@@ -1,0 +1,36 @@
+[2026-09-11T12:45:35+0530] ADOPT-4 demo capture — unfoundbox-crew/zero-vision
+[2026-09-11T12:45:35+0530] root=/Users/saurabh/code/unfoundbox-crew/zero-vision outdir=/Users/saurabh/code/unfoundbox-crew/zero-vision/adopt/gif
+[2026-09-11T12:45:35+0530] node=v22.22.3 ffmpeg=/opt/homebrew/bin/ffmpeg screencapture=/usr/sbin/screencapture
+[2026-09-11T12:45:35+0530] ### SHOT-1 hello.png
+[2026-09-11T12:45:35+0530] $ node /Users/saurabh/code/unfoundbox-crew/zero-vision/dist/cli.js ocr /Users/saurabh/code/unfoundbox-crew/zero-vision/fixtures/ocr/hello.png
+HELLO ZEROVISION
+[2026-09-11T12:45:36+0530] (exit 0)
+[2026-09-11T12:45:36+0530] ### SHOT-2 contact-sheet.png
+[2026-09-11T12:45:36+0530] $ node /Users/saurabh/code/unfoundbox-crew/zero-vision/dist/cli.js ocr /Users/saurabh/code/unfoundbox-crew/zero-vision/fixtures/ocr/contact-sheet.png
+TITLE 1
+TITLE 4
+TITLE 7
+TITLE 2
+TITLE 5
+TITLE 8
+TITLE 3
+TITLE 6
+TITLE 9
+[2026-09-11T12:45:36+0530] (exit 0)
+[2026-09-11T12:45:36+0530] ### SHOT-3 tabs (no Chrome, expect fail-closed)
+[2026-09-11T12:45:36+0530] $ node /Users/saurabh/code/unfoundbox-crew/zero-vision/dist/cli.js --tabs
+no debug port (tried 1948, 9223). Start Chrome with --remote-debugging-port=<n>
+[2026-09-11T12:45:36+0530] (exit 2)
+[2026-09-11T12:45:36+0530] ### SHOT-4 PASS check
+[2026-09-11T12:45:36+0530] got:  HELLO ZEROVISION
+[2026-09-11T12:45:36+0530] want: HELLO ZEROVISION
+[2026-09-11T12:45:36+0530] PASS hello.png
+[2026-09-11T12:45:36+0530] ### SHOTS 5-6 are tagline + install cards (no command; filmed from STORYBOARD.md)
+[2026-09-11T12:45:36+0530] ### capture
+MANUAL CAPTURE STEPS (macOS, ~30s):
+  1. Terminal 110x28, font 16pt monospace, run this script: bash adopt/gif/record.sh
+  2. screencapture -v -T0 demo.mov   # full-screen video of the terminal run
+     (or record terminal region only with QuickTime / Screen Studio)
+  3. ffmpeg -i demo.mov -vf "fps=10,scale=880:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=128[p];[s1][p]paletteuse" -loop 0 demo.gif
+  4. Keep gif <= 6 shots per STORYBOARD.md; trim silence at head/tail.
+[2026-09-11T12:45:36+0530] DONE — log: /Users/saurabh/code/unfoundbox-crew/zero-vision/adopt/gif/demo.log
