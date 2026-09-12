@@ -2,11 +2,11 @@
 
 > Read a page, a screenshot, or a video as text. Default path never sends pixels off the machine.
 
-Package: `zero-vision` 0.1.2, Apache-2.0. Bins: `zrv`, `zrv-mcp`, `snap`. Repo `unfoundbox-crew/zero-vision`.
+Package: `zero-vision` 0.2.0, Apache-2.0. Bins: `zrv`, `zrv-mcp`, `snap`. Repo `unfoundbox-crew/zero-vision`.
 `zrv` as an unscoped npm name is taken. Install `zero-vision`; that puts `zrv` on PATH. Use `npx zero-vision`, never `npx zrv`.
 Agent skill: `npx skills add unfoundbox-crew/zero-vision -g`.
 
-Sources, in order: README.md, SKILL.md, CHANGELOG.md, docs-agent/AGENT-MANIFEST.md. Sections below follow llms.txt order: Install, Commands, MCP tools, Engines, Examples, then Release history, then Agent manifest.
+Sources, in order: [README.md](../README.md), [SKILL.md](../SKILL.md), [CHANGELOG.md](../CHANGELOG.md), [docs-agent/AGENT-MANIFEST.md](./AGENT-MANIFEST.md). Also: [llms.txt](./llms.txt) (the index this file expands), [docs/spec.md](../docs/spec.md), [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md), [docs/ROADMAP.md](../docs/ROADMAP.md), [package.json](../package.json), [LICENSE](../LICENSE). Sections below follow [llms.txt](./llms.txt) order: Install, Commands, MCP tools, Engines, Examples, then Release history, then Agent manifest.
 
 ## Install
 
@@ -84,7 +84,7 @@ Perception rank, cheap and local first. Frontier only when named.
 1. Chrome AX / cleaned text (attach-only CDP — no click)
 2. Apple Vision OCR (`apple-vision`, default for files)
 3. On-device Foundation Model (`apple-fm`)
-4. Local VLM (`local-vlm`) — weights must already be on disk
+4. Local VLM (`local-vlm`) — mlx-vlm, weights must already be on disk
 5. Cloud VLM (`cloud-vlm`) — opt-in, never a fallback
 
 Usage mapping:
@@ -99,13 +99,31 @@ zrv ocr clip.mp4 [--mode scene|interval|all-idr] [--interval 2] [--max-frames 60
 zrv ocr --clipboard
 zrv snap --ocr
 zrv ocr --task describe --engine apple-fm   # on-device sentence of judgment
-# --engine local-vlm — only if weights are already on disk (SpacePilot / MLX)
+# --engine local-vlm — mlx-vlm; only if weights are already on disk
 # --engine cloud-vlm — only if the user named it. Never a fallback.
 ```
 
+Both opt-in engines run real inference as of 0.2.0, and both fail closed with a named error. Full env tables in [README](../README.md).
+
+`local-vlm` (mlx-vlm on Apple silicon) — `ZRV_LOCAL_VLM_MODEL` takes an `mlx-community` HF id or a directory of converted weights; `ZRV_PYTHON` names the interpreter that has `mlx-vlm`; `ZRV_LOCAL_VLM_TIMEOUT_MS` (180000) and `ZRV_LOCAL_VLM_MAX_TOKENS` (512) bound the run. Weights are never downloaded for you: absent weights give `local_vlm_no_weights` naming the path checked and the `huggingface-cli download` command. Other errors: `local_vlm_no_python`, `local_vlm_no_runner`, `local_vlm_timeout`, `local_vlm_inference_failed`, `local_vlm_runner_failed`, `local_vlm_bad_input`, `local_vlm_too_large`, `local_vlm_empty`. Images only, 30 MB cap, no video, no clipboard.
+
+```bash
+ZRV_PYTHON=<python-with-mlx-vlm> ZRV_LOCAL_VLM_MODEL=mlx-community/Qwen2-VL-2B-Instruct-4bit \
+  zrv ocr shot.png --engine local-vlm --task describe --json
+```
+
+`cloud-vlm` — one OpenAI-compatible `POST /chat/completions` with a base64 data-URL `image_url`. Endpoint from `ZRV_CLOUD_VLM_BASE_URL`, else `LITELLM_BASE_URL` / `LLM_BASE_URL`, else `http://127.0.0.1:8000/v1` (localhost, never a hardcoded remote address — set `LITELLM_BASE_URL` for a proxy elsewhere). Key from `ZRV_CLOUD_VLM_API_KEY`, else the variable named by `ZRV_CLOUD_VLM_KEY_ENV` (default `LITELLM_MASTER_KEY`). Model from `ZRV_CLOUD_VLM_MODEL`, default `gemini-3.7-flash`. Errors: `cloud_vlm_no_key`, `cloud_vlm_http_<status>`, `cloud_vlm_timeout`, `cloud_vlm_network`, `cloud_vlm_provider_error`, `cloud_vlm_bad_response`, `cloud_vlm_bad_input`, `cloud_vlm_too_large`, `cloud_vlm_empty`. Images only, 10 MB cap. OpenRouter and Gemini-direct are alternate base-URL/key configs, never the default.
+
+```bash
+LITELLM_BASE_URL=http://<proxy>:8000/v1 LITELLM_MASTER_KEY=... \
+  zrv ocr shot.png --engine cloud-vlm --task describe --json
+```
+
+Measured 2026-09-12, one 1280x800 screenshot, cold process: `local-vlm` (Qwen2-VL-2B-Instruct-4bit, 4-bit, 1.2 GB, `nice 19`) 13.1 s transcribe / 12.6 s describe; `cloud-vlm` ~6 s. `apple-fm` describe on a comparable image measured ~102 s, so `local-vlm` is the engine to name when a caller needs describe under a short timeout.
+
 Invariants: no silent cloud fallback; contact sheet = one image, never split; `snap` stays CLI-only; not a browser driver.
 
-Limits (v1): `local-vlm` and `cloud-vlm` are fail-closed — they check weights/key and refuse to spawn or POST. Video OCR needs the native binary.
+Limits: `local-vlm` and `cloud-vlm` are opt-in and fail-closed — they check weights/key and refuse with a named error rather than guessing, and no failure anywhere falls through to cloud. Video OCR needs the native binary, and only `apple-vision` and `tesseract` do video at all.
 
 How it compares:
 
@@ -121,7 +139,7 @@ How it compares:
 | Frontier VLM shot | no            | no        | frames     | no             | cost per image, off-machine |
 | agy Flash         | n/a           | no        | no         | no             | cloud + ~20s lag |
 
-zero-vision is free per call, private by default, and deterministic — but pixels need macOS + Apple silicon (see Linux table above), it never clicks by design, and it is 0.1.2, unproven at scale.
+zero-vision is free per call, private by default, and deterministic — but pixels need macOS + Apple silicon (see Linux table above), it never clicks by design, and it is 0.2.0, unproven at scale.
 
 ## Examples
 
@@ -133,6 +151,8 @@ zero-vision is free per call, private by default, and deterministic — but pixe
 - `zrv ocr --clipboard` — transcribe the clipboard image.
 - `zrv ocr --task describe --engine apple-fm` — one on-device sentence of judgment.
 - `zrv snap --ocr` — capture a region, print its text.
+- `zrv ocr shot.png --engine local-vlm --task describe --json` — describe on-device with mlx-vlm, weights already on disk.
+- `zrv ocr shot.png --engine cloud-vlm --task transcribe --json` — one OpenAI-compatible cloud call, opt-in only.
 
 ## Release history
 
@@ -172,4 +192,4 @@ Data handling: local-first. Default engines process bytes on the machine. No tel
 
 Stopping authority: the user. Any operator stop instruction or harness cancellation ends work immediately. An engine refusal is final for that call; retrying with a weaker or more remote engine without approval is out of scope.
 
-Audit surface: engine refusals carry machine-readable exit codes (`zrv ocr` without the native binary exits 3); denials name the missing input. Every read names its source (tab target, file path, engine, task) so a later turn can state what was read, with which engine, and what was refused. Behavior refers to 0.1.2; rank and flag names are re-verified against the spec on upgrade.
+Audit surface: engine refusals carry machine-readable exit codes (`zrv ocr` without the native binary exits 3); denials name the missing input. Every read names its source (tab target, file path, engine, task) so a later turn can state what was read, with which engine, and what was refused. Behavior refers to 0.2.0; rank and flag names are re-verified against the spec on upgrade.

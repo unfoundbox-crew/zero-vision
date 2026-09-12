@@ -2,7 +2,7 @@
 
 > Read a page, a screenshot, or a video as text. Default path never sends pixels off the machine.
 
-Full text for this file: [llms-full.txt](./llms-full.txt). Detail sources: [README](../README.md), [SKILL](../SKILL.md), [spec](../docs/spec.md), [CHANGELOG](../CHANGELOG.md), [package.json](../package.json), [license](../LICENSE).
+Full text for this file: [llms-full.txt](./llms-full.txt). Detail sources: [README](../README.md), [SKILL](../SKILL.md), [spec](../docs/spec.md), [architecture](../docs/ARCHITECTURE.md), [roadmap](../docs/ROADMAP.md), [CHANGELOG](../CHANGELOG.md), [package.json](../package.json), [license](../LICENSE).
 
 ## Install
 
@@ -30,9 +30,11 @@ Full text for this file: [llms-full.txt](./llms-full.txt). Detail sources: [READ
   1. Chrome AX / cleaned text (attach-only CDP, no click)
   2. Apple Vision OCR (`apple-vision`, default for files)
   3. On-device Foundation Model (`apple-fm`)
-  4. Local VLM (`local-vlm`), weights must already be on disk
+  4. Local VLM (`local-vlm`), mlx-vlm, weights must already be on disk
   5. Cloud VLM (`cloud-vlm`), opt-in only, never a fallback
-- `local-vlm` and `cloud-vlm` check weights/key and refuse to spawn or POST when absent. No silent cloud fallback. See [README](../README.md).
+- `local-vlm` runs mlx-vlm on Apple silicon via a bundled Python runner. `ZRV_LOCAL_VLM_MODEL` takes an `mlx-community` HF id or a weights directory, `ZRV_PYTHON` names the interpreter that has `mlx-vlm`. Weights are never downloaded for you: absent weights give `local_vlm_no_weights` naming the path and the download command. Measured 2026-09-12 on one 1280x800 screenshot, Qwen2-VL-2B-Instruct-4bit: 13.1 s transcribe, 12.6 s describe — against ~102 s for `apple-fm` describe. See [README](../README.md).
+- `cloud-vlm` is one OpenAI-compatible `POST /chat/completions` with a base64 data-URL image. Endpoint from `ZRV_CLOUD_VLM_BASE_URL`, else `LITELLM_BASE_URL` / `LLM_BASE_URL`, else `http://127.0.0.1:8000/v1`; key from `ZRV_CLOUD_VLM_API_KEY` or the variable `ZRV_CLOUD_VLM_KEY_ENV` names (default `LITELLM_MASTER_KEY`); model from `ZRV_CLOUD_VLM_MODEL` (default `gemini-3.7-flash`). Errors `cloud_vlm_no_key`, `cloud_vlm_http_<status>`, `cloud_vlm_timeout`. See [README](../README.md).
+- Both opt-in engines refuse rather than guess, and nothing falls through to cloud: `cloud-vlm` runs only when `--engine cloud-vlm` is named. Per [spec](../docs/spec.md).
 - Linux backend swaps documented in [README](../README.md): `tesseract` engine for OCR, `local-vlm` at Ollama / llama.cpp for describe, ffmpeg keyframes, grim/scrot capture.
 - Contact sheets are one image, never split. Video OCR needs the native binary.
 
@@ -45,4 +47,6 @@ Full text for this file: [llms-full.txt](./llms-full.txt). Detail sources: [READ
 - `zrv ocr clip.mp4 --mode scene --max-frames 60` — transcribe video keyframes.
 - `zrv ocr --clipboard` — transcribe the clipboard image.
 - `zrv ocr --task describe --engine apple-fm` — one on-device sentence of judgment.
+- `zrv ocr shot.png --engine local-vlm --task describe --json` — describe on-device with mlx-vlm (~13 s, weights already on disk).
+- `zrv ocr shot.png --engine cloud-vlm --task transcribe --json` — one opt-in cloud call.
 - `zrv snap --ocr` — capture a region, print its text.
