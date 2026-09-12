@@ -6,6 +6,94 @@ versioning follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- `cloud-vlm` no longer returns a fake `ok:true` when the LiteLLM proxy
+  silently reroutes the requested model to a different one. Found live
+  2026-09-12: a request for `claude-sonnet-4-6` came back served by
+  `openai/gpt-oss-20b`, a text-only model, which answered with a refusal
+  sentence instead of an error — exactly the shape `ok:true` was meant to
+  rule out. Two independent, fail-closed checks now run on every response:
+  the served `model` field is compared against the requested one (provider
+  prefixes like `openai/`/`anthropic/` and version/date suffixes normalized
+  away first) and a mismatch fails `cloud_vlm_model_mismatch` naming both
+  ids, unless `ZRV_CLOUD_VLM_ALLOW_REROUTE=1`; separately, the reply text is
+  scanned for a non-vision refusal ("can't see the image", "no ability to
+  view images", etc.) and fails `cloud_vlm_no_vision` if found — this one
+  fires even when the served model id matches, since a reroute could land on
+  another vision-capable model that still declines to look. Both map to exit
+  code 3 (engine unavailable), same as `cloud_vlm_no_key`. Hermetic tests for
+  both paths in `src/test/cloud-vlm.test.ts`. Re-run live against the exact
+  bug, same proxy, unmodified default config:
+  ```json
+  {"ok":false,"engine":"cloud-vlm","task":"describe","text":"","ms":27335,"model":"openai/gpt-oss-20b","error":"cloud_vlm_model_mismatch: requested \"claude-sonnet-4-6\" but the proxy served \"openai/gpt-oss-20b\"; set ZRV_CLOUD_VLM_ALLOW_REROUTE=1 to accept a rerouted model"}
+  ```
+  Confirms the proxy is still rerouting the default model as of this fix —
+  no model is currently verified working through it end to end; see
+  `docs/ARCHITECTURE.md` Known gaps.
+
+### Changed
+- `cloud-vlm`'s default model is now `claude-sonnet-4-6`, not `gemini-3.7-flash`.
+  2026-09-12: `gemini-3.7-flash` is out of daily quota (429) on Saurabh's proxy,
+  while `claude-sonnet-4-6` works for both `transcribe` and `describe` (5.8 s /
+  6.0 s measured on a 1280x800 screenshot). Switch back with
+  `ZRV_CLOUD_VLM_MODEL=gemini-3.7-flash` once the quota resets.
+
+## [0.2.0] - 2026-09-12
+
+### Added
+- `local-vlm` runs real inference: mlx-vlm on Apple silicon via a bundled
+  Python runner (`src/engines/local_vlm_runner.py`, JSON in / JSON out).
+  `ZRV_LOCAL_VLM_MODEL` takes an `mlx-community` HF id or a directory of
+  converted weights; `ZRV_PYTHON` names the interpreter that has `mlx-vlm`.
+  Weights are still never downloaded for you — absent weights give
+  `local_vlm_no_weights` naming the path checked and the download command.
+  Measured on one 1280x800 screenshot, `mlx-community/Qwen2-VL-2B-Instruct-4bit`
+  at `nice 19`, cold process: 13.1 s transcribe, 12.6 s describe. For contrast,
+  `apple-fm` describe measured ~102 s.
+- `cloud-vlm` runs real inference: one OpenAI-compatible
+  `POST /chat/completions` carrying the image as a base64 data URL.
+  Endpoint from `ZRV_CLOUD_VLM_BASE_URL`, else `LITELLM_BASE_URL` /
+  `LLM_BASE_URL`, else `http://127.0.0.1:8000/v1`; key from
+  `ZRV_CLOUD_VLM_API_KEY` or the variable `ZRV_CLOUD_VLM_KEY_ENV` names
+  (default `LITELLM_MASTER_KEY`); model from `ZRV_CLOUD_VLM_MODEL`
+  (default `gemini-3.7-flash`). Reports `tokens` always and `costUsd` when
+  the endpoint returns one. OpenRouter and Gemini-direct are alternate
+  base-URL/key configs, never the default. No address is hardcoded.
+- Named errors on both engines, so a caller can branch without string-matching
+  prose: `local_vlm_no_weights`, `local_vlm_no_python`, `local_vlm_no_runner`,
+  `local_vlm_timeout`, `local_vlm_inference_failed`, `local_vlm_runner_failed`,
+  `local_vlm_bad_input`, `local_vlm_too_large`, `local_vlm_empty`;
+  `cloud_vlm_no_key`, `cloud_vlm_http_<status>`, `cloud_vlm_timeout`,
+  `cloud_vlm_network`, `cloud_vlm_provider_error`, `cloud_vlm_bad_response`,
+  `cloud_vlm_bad_input`, `cloud_vlm_too_large`, `cloud_vlm_empty`.
+- Hermetic tests for both engines: a loopback OpenAI-compatible stub server
+  and a fake runner script. No key, no weights, no provider, no network.
+- `fixtures/ocr/screenshot-1280x800.png`, the latency fixture.
+- `ZRV_LOCAL_VLM_RUNNER` seam for shipping your own runner.
+
+### Changed
+- `npm run build` now also copies `local_vlm_runner.py` into `dist/engines/`,
+  so the published package is self-contained (`scripts/copy-assets.mjs`).
+- `cloud-vlm`'s default key variable is `LITELLM_MASTER_KEY`, not
+  `GEMINI_API_KEY`. The config file still never holds a key value.
+- `npm test` builds first (it needs the copied runner asset).
+
+### Fixed
+- README, SKILL.md, `docs-agent/llms.txt`, and `docs-agent/llms-full.txt`
+  described `local-vlm` and `cloud-vlm` as working opt-in engines while both
+  were permanent `ok:false` stubs. They are now real, and the docs carry the
+  env tables, error names, and measured latencies.
+- Audit finding D2: `docs-agent/llms-full.txt` had zero markdown links in its
+  source list. Every named source is now a relative link.
+
+### Unchanged, deliberately
+- Cloud is never a silent fallback. `cloud-vlm` runs only when
+  `--engine cloud-vlm` is named; no local failure routes to it.
+- Weights are never downloaded automatically. The runner sets
+  `HF_HUB_OFFLINE=1` and the engine fails closed before spawning.
+
+Engine commit: `2fdea07`.
+
 ## [0.1.2] - 2026-09-11
 
 ### Added

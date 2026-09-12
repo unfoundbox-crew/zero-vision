@@ -1,6 +1,6 @@
 {
   "name": "zero-vision",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Read a page, a screenshot, or a video as text. Default path never sends pixels off the machine.",
   "type": "module",
   "license": "Apache-2.0",
@@ -23,9 +23,9 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-assets.mjs",
     "native": "swift build -c release --package-path native --product zrv-native",
-    "test": "tsc && node --test dist/test/*.js",
+    "test": "npm run build && node --test dist/test/*.js",
     "zrv": "node dist/cli.js"
   },
   "repository": {

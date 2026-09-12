@@ -24,7 +24,7 @@ Do not use this to click, type, or drive a browser. Chrome DevTools MCP and Play
 1. `zrv` / `zrv --md` / `zrv --a11y` — attached tab, AX text, no pixels
 2. `zrv ocr <file>` — Apple Vision, default
 3. `zrv ocr --engine apple-fm --task describe` — on-device sentence of judgment
-4. `--engine local-vlm` — only if weights are already on disk (SpacePilot / MLX)
+4. `--engine local-vlm` — mlx-vlm, only if weights are already on disk (~13 s per image)
 5. `--engine cloud-vlm` — only if the user named it. Never a fallback
 
 ## Commands
@@ -43,6 +43,32 @@ zrv snap --ocr
 Install: `npm install -g zero-vision` then `npm run native` from a checkout for OCR. Package name is `zero-vision`; `npx zrv` hits a zombie. Use `npx zero-vision`.
 
 MCP: `zrv mcp` — tools `peek_tabs` `peek_page` `peek_a11y` `ocr_image` `ocr_video`.
+
+## The two opt-in describe engines
+
+Both run real inference and both fail closed with a named error. Neither is
+ever reached unless the user named it with `--engine`.
+
+```bash
+# local: mlx-vlm on Apple silicon. Weights must already be on disk.
+ZRV_PYTHON=<python-with-mlx-vlm> \
+ZRV_LOCAL_VLM_MODEL=mlx-community/Qwen2-VL-2B-Instruct-4bit \
+  zrv ocr shot.png --engine local-vlm --task describe
+
+# cloud: one OpenAI-compatible /chat/completions call. Set the base URL.
+LITELLM_BASE_URL=http://<proxy>:8000/v1 LITELLM_MASTER_KEY=... \
+  zrv ocr shot.png --engine cloud-vlm --task describe --json
+```
+
+Measured 2026-09-12 on one 1280x800 screenshot: `local-vlm` (Qwen2-VL-2B-4bit)
+13.1 s transcribe, 12.6 s describe — roughly 8x faster than `apple-fm`'s ~102 s
+describe, and the reason to prefer it when a caller needs a describe under a
+short timeout. `cloud-vlm` was ~6 s on the same image.
+
+Failures name themselves: `local_vlm_no_weights` (says the path and the download
+command), `local_vlm_no_python`, `cloud_vlm_no_key`, `cloud_vlm_http_<status>`,
+`cloud_vlm_timeout`. Never retry a fail-closed engine with cloud unless the user
+asked for cloud.
 
 ## Who consumes this
 

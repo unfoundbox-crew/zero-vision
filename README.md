@@ -19,7 +19,7 @@ Cheap and local first. Frontier only when you name it.
 1. Chrome AX / cleaned text (attach-only CDP — no click)
 2. Apple Vision OCR (`apple-vision`, default for files)
 3. On-device Foundation Model (`apple-fm`)
-4. Local VLM (`local-vlm`) — weights must already be on disk
+4. Local VLM (`local-vlm`) — mlx-vlm, weights must already be on disk
 5. Cloud VLM (`cloud-vlm`) — opt-in, never a fallback
 
 Not a browser driver. Chrome DevTools MCP and Playwright MCP already click.
@@ -154,9 +154,101 @@ Standalone repo. Other crew products call it; they do not own it.
 
 Photos of a room → classical CV → SDF block-out is MotionVector. This tool stops at text (and, if named, a local/cloud VLM).
 
+## Opt-in engines
+
+`local-vlm` and `cloud-vlm` run real inference since 0.2.0. Both are opt-in:
+they happen only when you pass `--engine`, never as a fallback from a failed
+local engine. Both fail closed with a named error rather than guessing.
+
+### `local-vlm` — mlx-vlm on Apple silicon
+
+```bash
+pip install mlx-vlm                                   # once, into your Python
+huggingface-cli download mlx-community/Qwen2-VL-2B-Instruct-4bit   # ~1.2 GB
+
+export ZRV_PYTHON=/path/to/python                     # the one with mlx-vlm
+export ZRV_LOCAL_VLM_MODEL=mlx-community/Qwen2-VL-2B-Instruct-4bit
+zrv ocr shot.png --engine local-vlm --task describe
+```
+
+Weights are never downloaded for you. `ZRV_LOCAL_VLM_MODEL` takes an
+`mlx-community` HF id (resolved in the local HF cache) or a directory of
+converted weights; if nothing is there you get `local_vlm_no_weights` naming
+the path it checked and the command that would fill it.
+
+| Env | Default | What |
+| --- | --- | --- |
+| `ZRV_LOCAL_VLM_MODEL` | `mlx-community/Qwen3-VL-8B-Instruct-4bit` | HF id or weights directory |
+| `ZRV_PYTHON` | `~/miniconda3/envs/local-ml-py311/bin/python`, else `python3` | interpreter with `mlx-vlm` |
+| `ZRV_LOCAL_VLM_TIMEOUT_MS` | `180000` | runner is SIGKILLed past this |
+| `ZRV_LOCAL_VLM_MAX_TOKENS` | `512` | generation cap |
+| `ZRV_LOCAL_VLM_RUNNER` | the bundled `local_vlm_runner.py` | your own JSON-in/JSON-out runner |
+
+Measured 2026-09-12, M-series MacBook Pro at `nice 19`, one 1280x800 screenshot,
+`mlx-community/Qwen2-VL-2B-Instruct-4bit` (4-bit, 1.2 GB), cold process each run —
+model load included:
+
+| Task | Wall clock |
+| --- | --- |
+| `transcribe` | 13.1 s |
+| `describe` | 12.6 s |
+
+Errors: `local_vlm_no_weights`, `local_vlm_no_python`, `local_vlm_no_runner`,
+`local_vlm_timeout`, `local_vlm_inference_failed`, `local_vlm_runner_failed`,
+`local_vlm_bad_input`, `local_vlm_too_large`, `local_vlm_empty`.
+No video, no clipboard — extract a frame or snap to a file first.
+
+### `cloud-vlm` — one OpenAI-compatible call
+
+Any endpoint that speaks `POST /chat/completions` with `image_url` content
+works. The default target is a self-hosted LiteLLM proxy fronting your own
+subscriptions; **set `LITELLM_BASE_URL`** (the built-in default is
+`http://127.0.0.1:8000/v1` — localhost, never a hardcoded remote address).
+
+```bash
+export LITELLM_BASE_URL=http://<your-proxy>:8000/v1
+export LITELLM_MASTER_KEY=...                         # or ZRV_CLOUD_VLM_API_KEY
+zrv ocr shot.png --engine cloud-vlm --task describe --json
+```
+
+| Env | Default | What |
+| --- | --- | --- |
+| `ZRV_CLOUD_VLM_BASE_URL` | `LITELLM_BASE_URL`, `LLM_BASE_URL`, then `http://127.0.0.1:8000/v1` | endpoint base |
+| `ZRV_CLOUD_VLM_API_KEY` | — | literal key; wins over the env-name form |
+| `ZRV_CLOUD_VLM_KEY_ENV` | `LITELLM_MASTER_KEY` | name of the variable holding the key |
+| `ZRV_CLOUD_VLM_MODEL` | `claude-sonnet-4-6` (2026-09-12: `gemini-3.7-flash` hit the proxy's daily quota; set this var to `gemini-3.7-flash` once it resets) | any vision model the endpoint serves |
+| `ZRV_CLOUD_VLM_TIMEOUT_MS` | `60000` | request is aborted past this |
+| `ZRV_CLOUD_VLM_MAX_TOKENS` | `1024` | generation cap |
+| `ZRV_CLOUD_VLM_ALLOW_REROUTE` | unset | `1` accepts a proxy-served model that differs from the one requested, instead of failing |
+
+Alternate endpoints are just a different base URL and key — OpenRouter
+(`https://openrouter.ai/api/v1`, `ZRV_CLOUD_VLM_KEY_ENV=OPENROUTER_API_KEY`,
+e.g. `qwen/qwen3.7-flash` at $0.03/$0.13 per 1M tokens as of 2026-09-12) or
+Gemini direct (`https://generativelanguage.googleapis.com/v1beta/openai`).
+
+**Fail-closed on a silent reroute** (2026-09-12): a proxy can accept a request
+for one model and serve a different one — measured live, `claude-sonnet-4-6`
+came back served by `openai/gpt-oss-20b`, a text-only model, which then
+returned `ok:true` with a refusal sentence instead of an error. cloud-vlm now
+checks the response's `model` field against the one requested (normalizing
+provider prefixes and version/date suffixes) and fails `cloud_vlm_model_mismatch`
+when they differ, and independently scans the reply text for a non-vision
+refusal ("can't see the image", "no ability to view images", etc.), failing
+`cloud_vlm_no_vision` if it finds one — even when the model id happens to
+match. Both are exit code 3. Set `ZRV_CLOUD_VLM_ALLOW_REROUTE=1` to accept a
+rerouted model deliberately.
+
+Errors: `cloud_vlm_no_key`, `cloud_vlm_http_<status>`, `cloud_vlm_timeout`,
+`cloud_vlm_network`, `cloud_vlm_provider_error`, `cloud_vlm_bad_response`,
+`cloud_vlm_bad_input`, `cloud_vlm_too_large`, `cloud_vlm_empty`,
+`cloud_vlm_model_mismatch`, `cloud_vlm_no_vision`.
+Images only, 10 MB cap, no video, no clipboard. `costUsd` is reported only
+when the endpoint returns a cost; `tokens` whenever it returns usage.
+
 ## v1 limits
 
-`local-vlm` and `cloud-vlm` are fail-closed: they check weights/key and refuse to spawn or POST. Contact sheets are one image, not a split grid. Video OCR needs the native binary.
+Contact sheets are one image, not a split grid. Video OCR needs the native
+binary, and only `apple-vision` and `tesseract` do video at all.
 
 ## Spec
 
