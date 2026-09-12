@@ -6,6 +6,8 @@ versioning follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-12
+
 ### Fixed
 - `cloud-vlm` no longer returns a fake `ok:true` when the LiteLLM proxy
   silently reroutes the requested model to a different one. Found live
