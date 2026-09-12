@@ -324,3 +324,18 @@ test("LITELLM_BASE_URL is the fallback base URL when ZRV_CLOUD_VLM_BASE_URL is u
     await stub.close();
   }
 });
+
+test("exit-code mapping: no key is 3 (engine unavailable), not 4", async () => {
+  const { execFile } = await import("node:child_process");
+  const cli = join(root, "dist", "cli.js");
+  const code = await new Promise<number>((resolve) => {
+    const child = execFile(
+      process.execPath,
+      [cli, "ocr", IMAGE, "--engine", "cloud-vlm", "--task", "describe", "--json"],
+      { env: { ...process.env, HOME: mkdtempSync(join(tmpdir(), "zrv-home-")), ZRV_CLOUD_VLM_API_KEY: "", LITELLM_MASTER_KEY: "" } },
+      () => {},
+    );
+    child.on("close", (c) => resolve(c ?? -1));
+  });
+  assert.equal(code, 3);
+});

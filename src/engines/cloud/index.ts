@@ -8,10 +8,12 @@ import { loadConfig } from "../index.js";
 // self-hosted LiteLLM proxy, which fronts every subscription behind one key.
 //
 // Default model `gemini-3.7-flash` — verified 2026-09-12 to be listed by the
-// proxy's `/v1/models` and to accept `image_url` content (live transcribe +
-// describe on fixtures/ocr, see CHANGELOG 0.2.0). Cost is whatever the
-// subscription behind the proxy costs, so this engine reports `costUsd` only
-// when the endpoint returns `usage.cost`.
+// proxy's `/v1/models` and to accept `image_url` content: a live `transcribe`
+// returned "HELLO ZEROVISION" in 4.2 s. `describe` on the same key then hit
+// Gemini's own 429 daily quota, so the describe path was proved on the same
+// proxy with `claude-sonnet-4-6` (5.8 s transcribe / 6.0 s describe on a
+// 1280x800 screenshot). Cost is whatever the subscription behind the proxy
+// costs, so `costUsd` appears only when the endpoint returns `usage.cost`.
 //
 // Alternate configs, both just a different base URL + key:
 //   OpenRouter     ZRV_CLOUD_VLM_BASE_URL=https://openrouter.ai/api/v1
