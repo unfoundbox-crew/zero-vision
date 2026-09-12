@@ -26,6 +26,8 @@ function hermetic(extra: Record<string, string | undefined> = {}) {
     HOME: mkdtempSync(join(tmpdir(), "zrv-home-")),
     ZRV_PYTHON: process.execPath,
     ZRV_LOCAL_VLM_RUNNER: FAKE_RUNNER,
+    // This file is the cold path's own suite; the warm daemon has its own.
+    ZRV_LOCAL_VLM_WARM: "0",
     ZRV_LOCAL_VLM_TIMEOUT_MS: "10000",
     FAKE_RUNNER_MODE: undefined,
     ...extra,

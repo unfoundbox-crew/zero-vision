@@ -183,19 +183,51 @@ the path it checked and the command that would fill it.
 | `ZRV_LOCAL_VLM_TIMEOUT_MS` | `180000` | runner is SIGKILLed past this |
 | `ZRV_LOCAL_VLM_MAX_TOKENS` | `512` | generation cap |
 | `ZRV_LOCAL_VLM_RUNNER` | the bundled `local_vlm_runner.py` | your own JSON-in/JSON-out runner |
+| `ZRV_LOCAL_VLM_WARM` | `1` | `0` pins the old one-shot spawn, no daemon |
+| `ZRV_LOCAL_VLM_IDLE_S` | `600` | daemon exits after this long idle (`ZRV_LOCAL_VLM_IDLE_MS` wins) |
+| `ZRV_LOCAL_VLM_QUEUE_MAX` | `2` | calls waiting on the busy daemon before `local_vlm_busy` |
+| `ZRV_LOCAL_VLM_SOCK` | `~/Library/Application Support/zero-vision/local-vlm.sock` | socket path (XDG state dir off macOS) |
+| `ZRV_LOCAL_VLM_NICE` | `19` | niceness the daemon runs at; `0` disables |
+| `ZRV_LOCAL_VLM_DAEMON` | the bundled `local_vlm_daemon.py` | your own daemon speaking the socket protocol |
+
+#### The warm daemon
+
+The first call starts a small per-user daemon that holds the weights and answers
+over a `0600` Unix socket — nothing listens on the network. Later calls skip the
+model load, which is most of the wall clock. It exits by itself after 10 minutes
+idle.
+
+```bash
+zrv local-vlm status   # pid, model, requests, idle; exit 3 when nothing runs
+zrv local-vlm stop     # ask it to exit now
+```
+
+The daemon is a cache, never a requirement: if it cannot start, the call falls
+back to the old one-shot spawn and the result carries `warmError` naming the
+reason. A warm call carries `warm: true`. One inference at a time; callers past
+`ZRV_LOCAL_VLM_QUEUE_MAX` get `local_vlm_busy` instead of piling onto the GPU.
+The model is pinned when the daemon starts — asking for a different
+`ZRV_LOCAL_VLM_MODEL` replaces the daemon rather than reloading in place.
 
 Measured 2026-09-12, M-series MacBook Pro at `nice 19`, one 1280x800 screenshot,
-`mlx-community/Qwen2-VL-2B-Instruct-4bit` (4-bit, 1.2 GB), cold process each run —
-model load included:
+`mlx-community/Qwen2-VL-2B-Instruct-4bit` (4-bit, 1.2 GB). Warm rows are the p50
+of five calls after the daemon was up; cold is one process per call, model load
+included. Both columns were taken in the same session, and the machine was busy
+(load average 24-45, other builds running) — an idle machine is faster; an
+earlier pass at load 14 put warm `describe` at 4.7-5.9 s.
 
-| Task | Wall clock |
-| --- | --- |
-| `transcribe` | 13.1 s |
-| `describe` | 12.6 s |
+| Task | Warm p50 (n=5) | Warm range | Cold one-shot | First call (daemon start + load) |
+| --- | --- | --- | --- | --- |
+| `transcribe` | **5.7 s** | 5.0-7.3 s | 10.8-17.4 s | 9.1 s |
+| `describe` | **6.7 s** | 6.2-8.0 s | 11.0-14.1 s | 13.0 s |
+
+Model load alone was 9.4 s of that first call. The documented default
+`mlx-community/Qwen3-VL-8B-Instruct-4bit` is still unmeasured — those weights are
+not on the machine these numbers came from.
 
 Errors: `local_vlm_no_weights`, `local_vlm_no_python`, `local_vlm_no_runner`,
 `local_vlm_timeout`, `local_vlm_inference_failed`, `local_vlm_runner_failed`,
-`local_vlm_bad_input`, `local_vlm_too_large`, `local_vlm_empty`.
+`local_vlm_bad_input`, `local_vlm_too_large`, `local_vlm_empty`, `local_vlm_busy`.
 No video, no clipboard — extract a frame or snap to a file first.
 
 ### `cloud-vlm` — one OpenAI-compatible call

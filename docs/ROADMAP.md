@@ -14,8 +14,7 @@ horizon: 2026-Q4
 
 ## Next (this month)
 
-- [ ] Keep a `local-vlm` process warm between calls — why it matters: ~13 s per image is almost all cold model load, since every call spawns a fresh Python process and reloads the weights; a warm runner is the difference between "usable in a loop" and "one-shot only" — done when: a second call in the same session is measurably faster than the first, with the number recorded
-- [ ] Tell pet-talk that `local-vlm` is now the fast describe engine — why it matters: pet-talk's `EYES_TIMEOUT_S` default is 8 s against `apple-fm describe`'s ~102 s, so describe always times out; `local-vlm` at ~13 s makes a modest timeout raise sufficient instead of impossible — done when: pet-talk either pins `local-vlm` for describe or raises the timeout to fit a named engine, and zero-vision's docs state the per-engine describe latencies (docs half done, 0.2.0)
+- [ ] Tell pet-talk that `local-vlm` is now the fast describe engine — why it matters: pet-talk's `EYES_TIMEOUT_S` default is 8 s against `apple-fm describe`'s ~102 s, so describe always times out; warm `local-vlm` at 6.7 s p50 (2B) fits inside that default once the daemon is up, and the first call needs ~13 s of headroom — done when: pet-talk either pins `local-vlm` for describe or raises the timeout to fit a named engine, and zero-vision's docs state the per-engine describe latencies (docs half done, 0.2.0)
 - [ ] Set GitHub repo topics and `homepage` — why it matters: audit D5, empty topics/homepage hurt discovery — done when: `gh repo view unfoundbox-crew/zero-vision --json topics,homepage` shows non-empty values
 - [ ] Clarify the README/llms.txt engine-rank list so "Chrome AX" reads as a separate producer, not a sixth `--engine` choice — why it matters: current phrasing implies `--engine` accepts a CDP option that does not exist in `EngineId` — done when: the rank section visually separates "the CDP reader (default for tab reads)" from "the five `--engine` values"
 
@@ -44,6 +43,7 @@ horizon: 2026-Q4
 | 2026-09-12 | `cloud-vlm` wired to a real OpenAI-compatible `POST /chat/completions` with a base64 data-URL image; LiteLLM proxy is the default target, OpenRouter and Gemini-direct are alternate base-URL/key configs; still opt-in, still never a fallback | 2fdea07, `feat/real-vlm-engines` |
 | 2026-09-12 | `local-vlm` wired to mlx-vlm through `src/engines/local_vlm_runner.py`; `ZRV_LOCAL_VLM_MODEL` takes an HF id or a weights dir; fails closed with `local_vlm_no_weights` naming the path and the download command | 2fdea07, `feat/real-vlm-engines` |
 | 2026-09-12 | Markdown links in `docs-agent/llms-full.txt`'s source list (fixes audit finding D2) | this branch |
+| 2026-09-12 | `local-vlm` warm daemon: `zrv` starts a per-user daemon on a 0600 Unix socket, weights load once, idle exit after `ZRV_LOCAL_VLM_IDLE_S` (600), one inference at a time with a queue cap, `zrv local-vlm status\|stop`, cold one-shot kept as a fallback that reports why. Measured on the 2B, machine at load 24-45: warm p50 **5.7 s transcribe / 6.7 s describe** vs 10.8-17.4 s cold in the same session | 150f04f, `feat/warm-local-vlm` |
 | 2026-09-12 | Hermetic tests for both opt-in engines: loopback OpenAI-compatible stub server, fake runner script | 2fdea07, `feat/real-vlm-engines` |
 
 ## Decision log
@@ -57,4 +57,5 @@ horizon: 2026-Q4
 | 2026-09-07 | 9222 is opt-in only, never probed by default | Probe 9222 first | `docs/spec.md` §2, §8 |
 | 2026-09-12 | `cloud-vlm` is a plain `fetch` to an OpenAI-compatible endpoint, not a provider SDK | A provider SDK as an optional peerDependency; one hardcoded provider | `src/engines/cloud/index.ts` |
 | 2026-09-12 | Default `cloud-vlm` target is the self-hosted LiteLLM proxy at a base URL the operator sets, defaulting to localhost | Hardcoding the proxy's tailnet address; defaulting to OpenRouter or a direct Gemini key | `src/engines/cloud/index.ts`, mirrors pet-talk `server/settings.py` |
-| 2026-09-12 | `local-vlm` shells out to a Python runner per call | A long-lived runner daemon (see Next); Node-side MLX bindings | `src/engines/local_vlm_runner.py` |
+| 2026-09-12 | `local-vlm` shells out to a Python runner per call | A long-lived runner daemon (superseded below); Node-side MLX bindings | `src/engines/local_vlm_runner.py` |
+| 2026-09-12 | Warm `local-vlm` is a per-user **daemon on a Unix socket**, not a child kept alive inside one CLI run — `zrv` is a fresh process per call, so an in-process child warms nothing for the callers that shell out (pet-talk does, per frame). The cold one-shot stays as a fallback that names why it ran | A long-lived child inside one `zrv` process; a loopback port plus a 0600 port file; reloading a different model in place instead of replacing the daemon | `src/engines/local_vlm_daemon.py`, `src/engines/local-vlm-warm.ts` |

@@ -27,6 +27,7 @@ function usage(): never {
   zrv --tabs
   zrv ocr <file> [--engine e] [--task transcribe|describe] [--mode scene|interval|all-idr] [--interval s] [--max-frames n]
   zrv snap [--ocr] [--save path]
+  zrv local-vlm status|stop [--json]
   zrv mcp
 `);
   process.exit(1);
@@ -100,8 +101,45 @@ export function parseArgv(raw: string[]): {
     else if (a.startsWith("--")) usage();
     else pos.push(a);
   }
-  const cmd = pos[0] === "ocr" || pos[0] === "snap" || pos[0] === "mcp" ? pos.shift()! : "page";
+  const cmd =
+    pos[0] === "ocr" || pos[0] === "snap" || pos[0] === "mcp" || pos[0] === "local-vlm"
+      ? pos.shift()!
+      : "page";
   return { cmd, pos, flags, langs };
+}
+
+/**
+ * `zrv local-vlm status|stop` — look at, or shut down, the warm daemon.
+ * Exit 0 when a daemon is running (status) or was stopped; 3 when there is none,
+ * matching the "engine unavailable" code the rest of the CLI uses.
+ */
+async function localVlmCmd(sub: string | undefined, json: boolean): Promise<void> {
+  const { daemonHealth, socketPath, stopDaemon, warmEnabled } = await import("./engines/local-vlm-warm.js");
+  const sock = socketPath();
+  if (sub === "status") {
+    const h = await daemonHealth(sock);
+    if (json) {
+      process.stdout.write(JSON.stringify({ ok: Boolean(h), socket: sock, warm: warmEnabled(), health: h }) + "\n");
+    } else if (h) {
+      process.stdout.write(
+        `running  pid ${h.pid}  model ${h.model}\n` +
+          `socket   ${sock}\n` +
+          `protocol ${h.protocol}  loaded ${h.loaded}  loadMs ${h.loadMs ?? "-"}\n` +
+          `requests ${h.requests}  inFlight ${h.inFlight}  waiting ${h.waiting}  queueMax ${h.queueMax}\n` +
+          `uptime   ${h.uptimeS.toFixed(1)}s  idle ${h.idleS.toFixed(1)}s of ${(h.idleMs / 1000).toFixed(0)}s\n`,
+      );
+    } else {
+      process.stderr.write(`no local-vlm daemon at ${sock}${warmEnabled() ? "" : " (warm disabled)"}\n`);
+    }
+    process.exit(h ? 0 : 3);
+  }
+  if (sub === "stop") {
+    const r = await stopDaemon(sock);
+    if (json) process.stdout.write(JSON.stringify({ ok: r.stopped, socket: sock, detail: r.detail }) + "\n");
+    else process.stdout.write(r.detail + "\n");
+    process.exit(r.stopped ? 0 : 3);
+  }
+  usage();
 }
 
 async function main(): Promise<void> {
@@ -111,6 +149,11 @@ async function main(): Promise<void> {
 
   const { cmd, pos, flags, langs } = parseArgv(raw);
   if (flags.help) usage();
+
+  if (cmd === "local-vlm") {
+    await localVlmCmd(pos[0], Boolean(flags.json));
+    return;
+  }
 
   if (cmd === "mcp") {
     const { startMcp } = await import("./mcp.js");

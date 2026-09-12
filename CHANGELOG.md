@@ -6,6 +6,58 @@ versioning follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- `local-vlm` stays warm. The first call starts a small per-user daemon
+  (`src/engines/local_vlm_daemon.py`) that loads the weights once and answers
+  over a `0600` Unix socket at
+  `~/Library/Application Support/zero-vision/local-vlm.sock` (XDG state dir off
+  macOS, `ZRV_LOCAL_VLM_SOCK` overrides). Later calls skip the model load, which
+  was most of the wall clock. JSON in and out is byte-identical to the cold
+  path — the daemon imports `load_model()`/`infer()` from
+  `local_vlm_runner.py`, so warm and cold cannot drift apart.
+  - Measured 2026-09-12, `mlx-community/Qwen2-VL-2B-Instruct-4bit` at
+    `nice 19`, one 1280x800 PNG, machine busy (load average 24-45, other
+    builds running), p50 of five warm calls:
+
+    | Task | Warm p50 (n=5) | Warm range | Cold one-shot, same session | First call |
+    | --- | --- | --- | --- | --- |
+    | `transcribe` | **5.7 s** | 5.0-7.3 s | 10.8-17.4 s | 9.1 s |
+    | `describe` | **6.7 s** | 6.2-8.0 s | 11.0-14.1 s | 13.0 s |
+
+    Model load alone was 9.4 s of that first call. Warm `describe` clears
+    pet-talk's "under 10 s" bar but not the 5 s stretch target on this machine's
+    load — reported as measured, not hidden; an earlier pass at load 14 gave
+    4.7-5.9 s, so the 5 s target looks reachable on an idle machine and the
+    model choice is the next thing to revisit. The documented 8B default
+    remains unmeasured — those weights are not on this machine.
+  - New env: `ZRV_LOCAL_VLM_WARM` (`1`; `0` pins the old one-shot spawn),
+    `ZRV_LOCAL_VLM_IDLE_S` (`600`, or `ZRV_LOCAL_VLM_IDLE_MS`),
+    `ZRV_LOCAL_VLM_QUEUE_MAX` (`2`), `ZRV_LOCAL_VLM_SOCK`, `ZRV_STATE_DIR`,
+    `ZRV_LOCAL_VLM_NICE` (`19`), `ZRV_LOCAL_VLM_SPAWN_TIMEOUT_MS` (`20000`),
+    `ZRV_LOCAL_VLM_DAEMON` (daemon-script seam, mirrors
+    `ZRV_LOCAL_VLM_RUNNER`).
+  - New CLI: `zrv local-vlm status [--json]` (pid, pinned model, protocol, load
+    ms, request and queue counters, idle vs budget; exit 0 running, 3 none) and
+    `zrv local-vlm stop [--json]`.
+  - `PerceptionResult` gains two optional `local-vlm` fields: `warm: true` when
+    the daemon served the call, and `warmError` naming why the cold path ran
+    instead. Nothing else changed shape.
+  - Fail-closed by design, four ways: the daemon is a cache, never a
+    requirement, so any start or transport failure falls back to the one-shot
+    spawn and reports the reason instead of erroring; the model is pinned at
+    spawn and a request for a different one replaces the daemon rather than
+    reloading in place (`local_vlm_daemon_model_mismatch`); one inference at a
+    time, with callers past the queue cap answered `local_vlm_busy` rather than
+    piling onto the GPU; and an exclusive `flock` beside the socket means
+    exactly one daemon owns it. Weights are still never downloaded — the daemon
+    imports the runner, which sets `HF_HUB_OFFLINE=1` first. Idle exit releases
+    the RAM.
+  - Hermetic tests in `src/test/local-vlm-warm.test.ts` against a fake daemon
+    (`fixtures/vlm/fake-daemon.mjs`): spawn, process reuse across calls, idle
+    exit and transparent restart, queue cap, cold fallback with the reason,
+    missing daemon script, model swap, protocol mismatch, warm off. No MLX, no
+    weights, no network.
+
 ## [0.2.1] - 2026-09-12
 
 ### Fixed

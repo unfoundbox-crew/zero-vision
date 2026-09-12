@@ -5,7 +5,10 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const assets = [["src/engines/local_vlm_runner.py", "dist/engines/local_vlm_runner.py"]];
+const assets = [
+  ["src/engines/local_vlm_runner.py", "dist/engines/local_vlm_runner.py"],
+  ["src/engines/local_vlm_daemon.py", "dist/engines/local_vlm_daemon.py"],
+];
 
 for (const [from, to] of assets) {
   mkdirSync(dirname(join(root, to)), { recursive: true });

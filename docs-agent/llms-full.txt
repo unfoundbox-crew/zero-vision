@@ -119,7 +119,7 @@ LITELLM_BASE_URL=http://<proxy>:8000/v1 LITELLM_MASTER_KEY=... \
   zrv ocr shot.png --engine cloud-vlm --task describe --json
 ```
 
-Measured 2026-09-12, one 1280x800 screenshot, cold process: `local-vlm` (Qwen2-VL-2B-Instruct-4bit, 4-bit, 1.2 GB, `nice 19`) 13.1 s transcribe / 12.6 s describe; `cloud-vlm` ~6 s. `apple-fm` describe on a comparable image measured ~102 s, so `local-vlm` is the engine to name when a caller needs describe under a short timeout.
+Measured 2026-09-12, one 1280x800 screenshot, `local-vlm` (Qwen2-VL-2B-Instruct-4bit, 4-bit, 1.2 GB, `nice 19`), machine at load 24-45: warm p50 5.7 s transcribe / 6.7 s describe through the 0.2.2 warm daemon, 11-17 s for a cold one-shot call, ~13 s for the first call that loads the weights; `cloud-vlm` ~6 s. `apple-fm` describe on a comparable image measured ~102 s, so `local-vlm` is the engine to name when a caller needs describe under a short timeout.
 
 Invariants: no silent cloud fallback; contact sheet = one image, never split; `snap` stays CLI-only; not a browser driver.
 
