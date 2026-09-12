@@ -43,7 +43,7 @@ horizon: 2026-Q4
 | 2026-09-12 | `cloud-vlm` wired to a real OpenAI-compatible `POST /chat/completions` with a base64 data-URL image; LiteLLM proxy is the default target, OpenRouter and Gemini-direct are alternate base-URL/key configs; still opt-in, still never a fallback | 2fdea07, `feat/real-vlm-engines` |
 | 2026-09-12 | `local-vlm` wired to mlx-vlm through `src/engines/local_vlm_runner.py`; `ZRV_LOCAL_VLM_MODEL` takes an HF id or a weights dir; fails closed with `local_vlm_no_weights` naming the path and the download command | 2fdea07, `feat/real-vlm-engines` |
 | 2026-09-12 | Markdown links in `docs-agent/llms-full.txt`'s source list (fixes audit finding D2) | this branch |
-| 2026-09-12 | `local-vlm` warm daemon: `zrv` starts a per-user daemon on a 0600 Unix socket, weights load once, idle exit after `ZRV_LOCAL_VLM_IDLE_S` (600), one inference at a time with a queue cap, `zrv local-vlm status\|stop`, cold one-shot kept as a fallback that reports why. Measured on the 2B, machine at load 24-45: warm p50 **5.7 s transcribe / 6.7 s describe** vs 10.8-17.4 s cold in the same session | SHA_PLACEHOLDER, `feat/warm-local-vlm` |
+| 2026-09-12 | `local-vlm` warm daemon: `zrv` starts a per-user daemon on a 0600 Unix socket, weights load once, idle exit after `ZRV_LOCAL_VLM_IDLE_S` (600), one inference at a time with a queue cap, `zrv local-vlm status\|stop`, cold one-shot kept as a fallback that reports why. Measured on the 2B, machine at load 24-45: warm p50 **5.7 s transcribe / 6.7 s describe** vs 10.8-17.4 s cold in the same session | 150f04f, `feat/warm-local-vlm` |
 | 2026-09-12 | Hermetic tests for both opt-in engines: loopback OpenAI-compatible stub server, fake runner script | 2fdea07, `feat/real-vlm-engines` |
 
 ## Decision log
