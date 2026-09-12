@@ -11,3 +11,6 @@ native/.build/
 
 # tesseract.js traineddata cache (test/CLI runs)
 *.traineddata
+
+# per-repo git worktrees
+.claude/worktrees/
