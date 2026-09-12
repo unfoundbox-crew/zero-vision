@@ -10,9 +10,7 @@ horizon: 2026-Q4
 ## Now (this week)
 
 - [ ] Wire `cloud-vlm` to an actual provider POST (Gemini first, per default `apiKeyEnv`) — why it matters: right now the engine always refuses even with a key set, so the 8% "describe" path has no working cloud option — done when: `zrv ocr --engine cloud-vlm --task describe` on a real image returns `ok:true` with `text` and, when the provider reports it, `costUsd`
-- [ ] Fix `package.json` `files[]` to ship `docs-agent/` (llms.txt, llms-full.txt, AGENT-MANIFEST.md) and `SKILL.md` in the npm tarball — why it matters: agent-readiness audit (D4, `adopt/agent-readiness-report.md` on `adopt/review-pile`) found registry installs currently have zero agent docs — done when: `npm pack` (or the published tarball) contains `docs-agent/llms.txt`
-- [ ] Add a README link to `docs-agent/llms.txt` — why it matters: same audit finding, agents landing on the README have no path to the agent-facing docs — done when: README has a working relative link to `docs-agent/llms.txt`
-- [ ] Add markdown links to `docs-agent/llms-full.txt`'s source list — why it matters: audit D2, the file names sources as plain text an agent cannot follow — done when: every named source in that file is a clickable relative link
+- [ ] Add markdown links to `docs-agent/llms-full.txt`'s source list — why it matters: audit D2 (`adopt/agent-readiness-report.md` on `adopt/review-pile`), the file names sources as plain text an agent cannot follow, still 0 links as of 2026-09-12 — done when: every named source in that file is a clickable relative link
 
 ## Next (this month)
 
@@ -41,6 +39,7 @@ horizon: 2026-Q4
 | 2026-09-10 | First release: CLI, MCP server, apple-vision/apple-fm/local-vlm/cloud-vlm/tesseract engines | 0.1.0, see CHANGELOG.md |
 | 2026-09-10 | Corrected release notes attribution | 0.1.1, see CHANGELOG.md |
 | 2026-09-11 | `--selector` reads, CLI/MCP flag parity, examples, bin-path fix, release workflow pipefail fix | 0.1.2, see CHANGELOG.md |
+| 2026-09-12 | `docs-agent/` (llms.txt, llms-full.txt) and `SKILL.md` added to `package.json` `files[]`; README linked to `docs-agent/llms.txt` (fixes audit finding D4) | bee068a, "Agent pack: llms.txt, full text, manifest, README links, ship in tarball (#12)" |
 
 ## Decision log
 
