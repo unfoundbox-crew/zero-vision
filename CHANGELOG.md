@@ -6,6 +6,13 @@ versioning follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- `cloud-vlm`'s default model is now `claude-sonnet-4-6`, not `gemini-3.7-flash`.
+  2026-09-12: `gemini-3.7-flash` is out of daily quota (429) on Saurabh's proxy,
+  while `claude-sonnet-4-6` works for both `transcribe` and `describe` (5.8 s /
+  6.0 s measured on a 1280x800 screenshot). Switch back with
+  `ZRV_CLOUD_VLM_MODEL=gemini-3.7-flash` once the quota resets.
+
 ## [0.2.0] - 2026-09-12
 
 ### Added

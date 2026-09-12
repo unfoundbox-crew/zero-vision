@@ -7,13 +7,15 @@ import { loadConfig } from "../index.js";
 // endpoint that speaks that wire format works; the default target is the
 // self-hosted LiteLLM proxy, which fronts every subscription behind one key.
 //
-// Default model `gemini-3.7-flash` — verified 2026-09-12 to be listed by the
-// proxy's `/v1/models` and to accept `image_url` content: a live `transcribe`
-// returned "HELLO ZEROVISION" in 4.2 s. `describe` on the same key then hit
-// Gemini's own 429 daily quota, so the describe path was proved on the same
-// proxy with `claude-sonnet-4-6` (5.8 s transcribe / 6.0 s describe on a
-// 1280x800 screenshot). Cost is whatever the subscription behind the proxy
-// costs, so `costUsd` appears only when the endpoint returns `usage.cost`.
+// Default model `claude-sonnet-4-6` — set 2026-09-12: `gemini-3.7-flash` (the
+// prior default) is listed by the proxy's `/v1/models` and accepts `image_url`
+// content, and a live `transcribe` on it returned "HELLO ZEROVISION" in 4.2 s,
+// but `describe` on the same key hit Gemini's own daily 429 quota. Both paths
+// were proved on the same proxy with `claude-sonnet-4-6` instead (5.8 s
+// transcribe / 6.0 s describe on a 1280x800 screenshot), so it is the default
+// until Gemini's quota resets — swap back via ZRV_CLOUD_VLM_MODEL=gemini-3.7-flash
+// once it does. Cost is whatever the subscription behind the proxy costs, so
+// `costUsd` appears only when the endpoint returns `usage.cost`.
 //
 // Alternate configs, both just a different base URL + key:
 //   OpenRouter     ZRV_CLOUD_VLM_BASE_URL=https://openrouter.ai/api/v1
@@ -23,7 +25,7 @@ import { loadConfig } from "../index.js";
 //                  ($0.06/$0.18), google/gemini-3.1-flash-lite ($0.25/$1.50)
 //   Gemini direct  ZRV_CLOUD_VLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
 //                  ZRV_CLOUD_VLM_KEY_ENV=GEMINI_PRIMARY_API_KEY
-export const DEFAULT_CLOUD_MODEL = "gemini-3.7-flash";
+export const DEFAULT_CLOUD_MODEL = "claude-sonnet-4-6";
 // Localhost, never a hardcoded tailnet address — same convention as pet-talk's
 // `server/settings.py`. Point LITELLM_BASE_URL (or ZRV_CLOUD_VLM_BASE_URL) at
 // the proxy when it is not on this machine.

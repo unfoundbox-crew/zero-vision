@@ -216,7 +216,7 @@ zrv ocr shot.png --engine cloud-vlm --task describe --json
 | `ZRV_CLOUD_VLM_BASE_URL` | `LITELLM_BASE_URL`, `LLM_BASE_URL`, then `http://127.0.0.1:8000/v1` | endpoint base |
 | `ZRV_CLOUD_VLM_API_KEY` | — | literal key; wins over the env-name form |
 | `ZRV_CLOUD_VLM_KEY_ENV` | `LITELLM_MASTER_KEY` | name of the variable holding the key |
-| `ZRV_CLOUD_VLM_MODEL` | `gemini-3.7-flash` | any vision model the endpoint serves |
+| `ZRV_CLOUD_VLM_MODEL` | `claude-sonnet-4-6` (2026-09-12: `gemini-3.7-flash` hit the proxy's daily quota; set this var to `gemini-3.7-flash` once it resets) | any vision model the endpoint serves |
 | `ZRV_CLOUD_VLM_TIMEOUT_MS` | `60000` | request is aborted past this |
 | `ZRV_CLOUD_VLM_MAX_TOKENS` | `1024` | generation cap |
 
