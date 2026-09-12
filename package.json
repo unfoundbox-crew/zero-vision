@@ -23,9 +23,9 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-assets.mjs",
     "native": "swift build -c release --package-path native --product zrv-native",
-    "test": "tsc && node --test dist/test/*.js",
+    "test": "npm run build && node --test dist/test/*.js",
     "zrv": "node dist/cli.js"
   },
   "repository": {
