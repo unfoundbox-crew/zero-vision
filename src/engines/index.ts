@@ -33,6 +33,10 @@ export interface PerceptionResult {
   costUsd?: number;
   model?: string;
   error?: string;
+  /** local-vlm only: this call was served by the warm daemon, no model load. */
+  warm?: boolean;
+  /** local-vlm only: why the warm daemon was not used, when the cold path ran instead. */
+  warmError?: string;
 }
 
 export interface Engine {

@@ -5,6 +5,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Engine, PerceiveInput, PerceptionResult, Task } from "./index.js";
 import { loadConfig } from "./index.js";
+import { ask, ensureDaemon, socketPath, warmEnabled } from "./local-vlm-warm.js";
 
 // mlx-vlm on Apple silicon. Weights are never downloaded by this engine —
 // the runner sets HF_HUB_OFFLINE=1 and we fail closed here first.
@@ -201,83 +202,125 @@ export const localVlm: Engine = {
 
 /** One inference, given a real file on disk. Split out so the temp file is always cleaned up. */
 async function run1(task: Task, t0: number, imagePath: string): Promise<PerceptionResult> {
-    const spec =
-      process.env.ZRV_LOCAL_VLM_MODEL || loadConfig().engines?.["local-vlm"]?.modelPath || DEFAULT_LOCAL_MODEL;
-    const model = resolveModel(spec);
-    if (!model.dir) {
-      // Fail closed. This engine never downloads weights (README: "weights must
-      // already be on disk"), so name where we looked and how to fix it.
-      return fail(
-        task,
-        `local_vlm_no_weights: no mlx weights for "${spec}" at ${model.looked}. ` +
-          `Download them first: ${model.downloadCmd}`,
-        Date.now() - t0,
-        spec,
-      );
-    }
+  const spec =
+    process.env.ZRV_LOCAL_VLM_MODEL || loadConfig().engines?.["local-vlm"]?.modelPath || DEFAULT_LOCAL_MODEL;
+  const model = resolveModel(spec);
+  if (!model.dir) {
+    // Fail closed. This engine never downloads weights (README: "weights must
+    // already be on disk"), so name where we looked and how to fix it.
+    return fail(
+      task,
+      `local_vlm_no_weights: no mlx weights for "${spec}" at ${model.looked}. ` +
+        `Download them first: ${model.downloadCmd}`,
+      Date.now() - t0,
+      spec,
+    );
+  }
 
-    const script = runnerPath();
-    if (!existsSync(script)) {
-      return fail(task, `local_vlm_no_runner: runner script missing at ${script}`, Date.now() - t0, spec);
-    }
-    const bin = pythonBin();
-    const timeoutMs = Number(process.env.ZRV_LOCAL_VLM_TIMEOUT_MS || DEFAULT_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS;
+  const bin = pythonBin();
+  const timeoutMs = Number(process.env.ZRV_LOCAL_VLM_TIMEOUT_MS || DEFAULT_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS;
+  const payload = {
+    model: model.dir,
+    image: imagePath,
+    task,
+    maxTokens: Number(process.env.ZRV_LOCAL_VLM_MAX_TOKENS || 512) || 512,
+    temperature: 0,
+  };
 
-    let run: { code: number; stdout: string; stderr: string; timedOut: boolean };
-    try {
-      run = await runRunner(
-        bin,
-        script,
-        {
-          model: model.dir,
-          image: imagePath,
-          task,
-          maxTokens: Number(process.env.ZRV_LOCAL_VLM_MAX_TOKENS || 512) || 512,
-          temperature: 0,
-        },
-        timeoutMs,
-      );
-    } catch (err) {
-      return fail(
+  // Warm first: a daemon that already holds the weights answers in inference
+  // time instead of load-plus-inference time. Every reason we could not use it
+  // is carried into the cold result as `warmError` rather than swallowed.
+  let warmError: string | undefined;
+  if (warmEnabled()) {
+    const ensured = await ensureDaemon(model.dir, bin);
+    if (ensured.ok) {
+      const sent = await ask(socketPath(), { op: "perceive", ...payload }, timeoutMs);
+      if (sent.ok) {
+        const out = sent.reply as RunnerOut & { warm?: boolean };
+        return mapOut(out, task, t0, spec, true);
+      }
+      // The daemon was there and then was not: say so, then pay the cold load.
+      warmError = sent.reason;
+    } else {
+      warmError = ensured.reason;
+    }
+  }
+
+  const script = runnerPath();
+  if (!existsSync(script)) {
+    return {
+      ...fail(task, `local_vlm_no_runner: runner script missing at ${script}`, Date.now() - t0, spec),
+      ...(warmError ? { warmError } : {}),
+    };
+  }
+
+  let run: { code: number; stdout: string; stderr: string; timedOut: boolean };
+  try {
+    run = await runRunner(bin, script, payload, timeoutMs);
+  } catch (err) {
+    return {
+      ...fail(
         task,
         `local_vlm_no_python: cannot spawn ${bin} (${err instanceof Error ? err.message : String(err)}). ` +
           "Set ZRV_PYTHON to an interpreter with mlx-vlm installed.",
         Date.now() - t0,
         spec,
-      );
-    }
-
-    if (run.timedOut) {
-      return fail(task, `local_vlm_timeout: runner exceeded ${timeoutMs}ms`, Date.now() - t0, spec);
-    }
-
-    const line = run.stdout.trim().split("\n").filter(Boolean).at(-1);
-    let out: RunnerOut | null = null;
-    if (line) {
-      try {
-        out = JSON.parse(line) as RunnerOut;
-      } catch {
-        out = null;
-      }
-    }
-    if (!out) {
-      const detail = (run.stderr.trim() || run.stdout.trim() || `exit ${run.code}`).slice(-300);
-      return fail(task, `local_vlm_runner_failed: ${detail}`, Date.now() - t0, spec);
-    }
-    if (!out.ok) {
-      return fail(task, out.error ?? `local_vlm_runner_failed: exit ${run.code}`, Date.now() - t0, spec);
-    }
-    const text = (out.text ?? "").trim();
-    if (!text) {
-      return fail(task, "local_vlm_empty: runner returned no text", Date.now() - t0, spec);
-    }
-    return {
-      ok: true,
-      engine: "local-vlm",
-      task,
-      text,
-      ms: Date.now() - t0,
-      model: spec,
-      ...(out.tokens ? { tokens: out.tokens } : {}),
+      ),
+      ...(warmError ? { warmError } : {}),
     };
+  }
+
+  if (run.timedOut) {
+    return {
+      ...fail(task, `local_vlm_timeout: runner exceeded ${timeoutMs}ms`, Date.now() - t0, spec),
+      ...(warmError ? { warmError } : {}),
+    };
+  }
+
+  const line = run.stdout.trim().split("\n").filter(Boolean).at(-1);
+  let out: RunnerOut | null = null;
+  if (line) {
+    try {
+      out = JSON.parse(line) as RunnerOut;
+    } catch {
+      out = null;
+    }
+  }
+  if (!out) {
+    const detail = (run.stderr.trim() || run.stdout.trim() || `exit ${run.code}`).slice(-300);
+    return {
+      ...fail(task, `local_vlm_runner_failed: ${detail}`, Date.now() - t0, spec),
+      ...(warmError ? { warmError } : {}),
+    };
+  }
+  return mapOut(out, task, t0, spec, false, warmError);
+}
+
+/** One runner reply — warm socket or cold stdout, the shape is identical — to a PerceptionResult. */
+function mapOut(
+  out: RunnerOut,
+  task: Task,
+  t0: number,
+  spec: string,
+  warm: boolean,
+  warmError?: string,
+): PerceptionResult {
+  const extra = { ...(warm ? { warm: true } : {}), ...(warmError ? { warmError } : {}) };
+  if (!out.ok) {
+    return { ...fail(task, out.error ?? "local_vlm_runner_failed: no error given", Date.now() - t0, spec), ...extra };
+  }
+  const text = (out.text ?? "").trim();
+  if (!text) {
+    return { ...fail(task, "local_vlm_empty: runner returned no text", Date.now() - t0, spec), ...extra };
+  }
+  return {
+    ok: true,
+    engine: "local-vlm",
+    task,
+    text,
+    ms: Date.now() - t0,
+    model: spec,
+    ...(out.tokens ? { tokens: out.tokens } : {}),
+    ...extra,
+  };
 }

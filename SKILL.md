@@ -60,10 +60,14 @@ LITELLM_BASE_URL=http://<proxy>:8000/v1 LITELLM_MASTER_KEY=... \
   zrv ocr shot.png --engine cloud-vlm --task describe --json
 ```
 
-Measured 2026-09-12 on one 1280x800 screenshot: `local-vlm` (Qwen2-VL-2B-4bit)
-13.1 s transcribe, 12.6 s describe — roughly 8x faster than `apple-fm`'s ~102 s
-describe, and the reason to prefer it when a caller needs a describe under a
-short timeout. `cloud-vlm` was ~6 s on the same image.
+Measured 2026-09-12 on one 1280x800 screenshot, `local-vlm` on Qwen2-VL-2B-4bit:
+warm p50 **5.7 s transcribe / 6.7 s describe** (five calls after the daemon was
+up, machine at load 24-45), against 11-17 s for a cold one-shot call and ~13 s
+for the first call, which starts the daemon and loads the weights. Either way it
+beats `apple-fm`'s ~102 s describe, and it is the engine to name when a caller
+needs a describe under a short timeout. `cloud-vlm` was ~6 s on the same image.
+`zrv local-vlm status|stop` inspects the daemon; `ZRV_LOCAL_VLM_WARM=0` turns it
+off.
 
 Failures name themselves: `local_vlm_no_weights` (says the path and the download
 command), `local_vlm_no_python`, `cloud_vlm_no_key`, `cloud_vlm_http_<status>`,
