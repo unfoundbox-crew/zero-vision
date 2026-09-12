@@ -168,5 +168,5 @@ Apache License 2.0. See [LICENSE](LICENSE).
 
 ## Living docs
 
-Architecture and roadmap: `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`. Rendered page: https://claude.ai/code/artifact/57578976-d952-47ac-b219-2c440af1cd22-PLACEHOLDER-FIX
+Architecture and roadmap: `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`. Rendered page: https://claude.ai/code/artifact/11bfcf28-118b-46ec-b6a7-50db50f7cd5b
 Rebuild: `python3 docs/site/build.py --arch docs/ARCHITECTURE.md --roadmap docs/ROADMAP.md --out docs/site/index.html --product-name zero-vision --repo-url https://github.com/unfoundbox-crew/zero-vision`
