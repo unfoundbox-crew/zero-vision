@@ -101,7 +101,10 @@ test("cloud-vlm posts a base64 data URL and returns the apple-vision result shap
     res.end(ok("HELLO ZEROVISION"));
   });
   try {
-    await withEnv(hermetic(stub.baseUrl), async () => {
+    // The stub serves "stub-vision-1" while the default requested model is
+    // DEFAULT_CLOUD_MODEL — a deliberate mismatch this test isn't about, so
+    // opt in to the reroute rather than tripping cloud_vlm_model_mismatch.
+    await withEnv(hermetic(stub.baseUrl, { ZRV_CLOUD_VLM_ALLOW_REROUTE: "1" }), async () => {
       const r = await perceive("cloud-vlm", { kind: "image", path: IMAGE, task: "transcribe" });
       assert.equal(r.ok, true, r.error);
       assert.equal(r.engine, "cloud-vlm");
@@ -134,7 +137,9 @@ test("describe sends the describe prompt; transcribe sends the verbatim one", as
     res.end(ok("a white card"));
   });
   try {
-    await withEnv(hermetic(stub.baseUrl), async () => {
+    // Not a model-matching test; the stub's fixed "stub-vision-1" would
+    // otherwise trip the mismatch check against the requested default.
+    await withEnv(hermetic(stub.baseUrl, { ZRV_CLOUD_VLM_ALLOW_REROUTE: "1" }), async () => {
       const r = await perceive("cloud-vlm", { kind: "image", path: IMAGE, task: "describe" });
       assert.equal(r.ok, true, r.error);
       assert.equal(r.task, "describe");
@@ -151,10 +156,13 @@ test("ZRV_CLOUD_VLM_MODEL overrides the default model", async () => {
     res.end(ok("x"));
   });
   try {
-    await withEnv(hermetic(stub.baseUrl, { ZRV_CLOUD_VLM_MODEL: "some-other-vlm" }), async () => {
-      const r = await perceive("cloud-vlm", { kind: "image", path: IMAGE, task: "transcribe" });
-      assert.equal(r.ok, true, r.error);
-    });
+    await withEnv(
+      hermetic(stub.baseUrl, { ZRV_CLOUD_VLM_MODEL: "some-other-vlm", ZRV_CLOUD_VLM_ALLOW_REROUTE: "1" }),
+      async () => {
+        const r = await perceive("cloud-vlm", { kind: "image", path: IMAGE, task: "transcribe" });
+        assert.equal(r.ok, true, r.error);
+      },
+    );
     assert.equal(stub.seen[0].body.model, "some-other-vlm");
   } finally {
     await stub.close();
@@ -312,6 +320,9 @@ test("LITELLM_BASE_URL is the fallback base URL when ZRV_CLOUD_VLM_BASE_URL is u
         ZRV_CLOUD_VLM_KEY_ENV: undefined,
         ZRV_CLOUD_VLM_MODEL: undefined,
         LITELLM_BASE_URL: stub.baseUrl,
+        // Not a model-matching test; the stub's fixed "stub-vision-1" would
+        // otherwise trip the mismatch check against the requested default.
+        ZRV_CLOUD_VLM_ALLOW_REROUTE: "1",
       },
       async () => {
         const r = await perceive("cloud-vlm", { kind: "image", path: IMAGE, task: "transcribe" });
@@ -320,6 +331,100 @@ test("LITELLM_BASE_URL is the fallback base URL when ZRV_CLOUD_VLM_BASE_URL is u
       },
     );
     assert.equal(stub.seen[0].path, "/v1/chat/completions");
+  } finally {
+    await stub.close();
+  }
+});
+
+test("a proxy reroute to a different model is cloud_vlm_model_mismatch, not ok:true", async () => {
+  const stub = await stubProvider((_seen, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    // Requested claude-sonnet-4-6 (the default); the proxy served a
+    // completely different, text-only model instead. This is the exact
+    // shape of the bug: 200 OK, plausible-looking JSON, wrong model.
+    res.end(ok("I'm sorry, but I can't see the image you're referring to.", { model: "openai/gpt-oss-20b" }));
+  });
+  try {
+    await withEnv(hermetic(stub.baseUrl), async () => {
+      const r = await perceive("cloud-vlm", { kind: "image", path: IMAGE, task: "describe" });
+      assert.equal(r.ok, false);
+      assert.match(r.error ?? "", /^cloud_vlm_model_mismatch:/);
+      assert.match(r.error ?? "", /claude-sonnet-4-6/);
+      assert.match(r.error ?? "", /openai\/gpt-oss-20b/);
+      assert.equal(r.model, "openai/gpt-oss-20b");
+    });
+  } finally {
+    await stub.close();
+  }
+});
+
+test("ZRV_CLOUD_VLM_ALLOW_REROUTE=1 accepts a rerouted model instead of failing", async () => {
+  const stub = await stubProvider((_seen, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(ok("a vision answer", { model: "some/other-model" }));
+  });
+  try {
+    await withEnv(hermetic(stub.baseUrl, { ZRV_CLOUD_VLM_ALLOW_REROUTE: "1" }), async () => {
+      const r = await perceive("cloud-vlm", { kind: "image", path: IMAGE, task: "describe" });
+      assert.equal(r.ok, true, r.error);
+      assert.equal(r.model, "some/other-model");
+    });
+  } finally {
+    await stub.close();
+  }
+});
+
+test("a matching model is never flagged as a mismatch, provider prefix and version suffix included", async () => {
+  const stub = await stubProvider((seen, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    // Same model, just dressed up the way a real provider echoes it back:
+    // vendor-prefixed and date-suffixed. Must NOT trip cloud_vlm_model_mismatch.
+    res.end(ok("fine", { model: `anthropic/${seen.body.model}-20260910` }));
+  });
+  try {
+    await withEnv(hermetic(stub.baseUrl), async () => {
+      const r = await perceive("cloud-vlm", { kind: "image", path: IMAGE, task: "describe" });
+      assert.equal(r.ok, true, r.error);
+    });
+  } finally {
+    await stub.close();
+  }
+});
+
+test("a non-vision refusal is cloud_vlm_no_vision even when the model id matches", async () => {
+  const stub = await stubProvider((seen, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    // Model id matches the request exactly, so this cannot be caught by the
+    // mismatch check alone — the refusal-text check is the second, independent
+    // guard against the same fake-green failure mode.
+    res.end(ok("I don't have the ability to see images.", { model: seen.body.model }));
+  });
+  try {
+    await withEnv(hermetic(stub.baseUrl), async () => {
+      const r = await perceive("cloud-vlm", { kind: "image", path: IMAGE, task: "describe" });
+      assert.equal(r.ok, false);
+      assert.match(r.error ?? "", /^cloud_vlm_no_vision:/);
+      assert.match(r.error ?? "", /ability to see images/);
+    });
+  } finally {
+    await stub.close();
+  }
+});
+
+test("ordinary described text mentioning 'image' is never mistaken for a refusal", async () => {
+  const stub = await stubProvider((seen, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(
+      ok("The image shows a white card with the text HELLO ZEROVISION printed in black.", {
+        model: seen.body.model,
+      }),
+    );
+  });
+  try {
+    await withEnv(hermetic(stub.baseUrl), async () => {
+      const r = await perceive("cloud-vlm", { kind: "image", path: IMAGE, task: "describe" });
+      assert.equal(r.ok, true, r.error);
+    });
   } finally {
     await stub.close();
   }
@@ -338,4 +443,37 @@ test("exit-code mapping: no key is 3 (engine unavailable), not 4", async () => {
     child.on("close", (c) => resolve(c ?? -1));
   });
   assert.equal(code, 3);
+});
+
+test("exit-code mapping: a rerouted model is also 3, not a silent 0", async () => {
+  const stub = await stubProvider((_seen, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(ok("I'm sorry, but I can't see the image you're referring to.", { model: "openai/gpt-oss-20b" }));
+  });
+  try {
+    const { execFile } = await import("node:child_process");
+    const cli = join(root, "dist", "cli.js");
+    const code = await new Promise<number>((resolve) => {
+      const child = execFile(
+        process.execPath,
+        [cli, "ocr", IMAGE, "--engine", "cloud-vlm", "--task", "describe", "--json"],
+        {
+          env: {
+            ...process.env,
+            HOME: mkdtempSync(join(tmpdir(), "zrv-home-")),
+            ZRV_CLOUD_VLM_API_KEY: "stub-key-not-real",
+            ZRV_CLOUD_VLM_BASE_URL: stub.baseUrl,
+            ZRV_CLOUD_VLM_MODEL: "",
+            LITELLM_BASE_URL: "",
+            LLM_BASE_URL: "",
+          },
+        },
+        () => {},
+      );
+      child.on("close", (c) => resolve(c ?? -1));
+    });
+    assert.equal(code, 3);
+  } finally {
+    await stub.close();
+  }
 });

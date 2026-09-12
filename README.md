@@ -219,15 +219,29 @@ zrv ocr shot.png --engine cloud-vlm --task describe --json
 | `ZRV_CLOUD_VLM_MODEL` | `claude-sonnet-4-6` (2026-09-12: `gemini-3.7-flash` hit the proxy's daily quota; set this var to `gemini-3.7-flash` once it resets) | any vision model the endpoint serves |
 | `ZRV_CLOUD_VLM_TIMEOUT_MS` | `60000` | request is aborted past this |
 | `ZRV_CLOUD_VLM_MAX_TOKENS` | `1024` | generation cap |
+| `ZRV_CLOUD_VLM_ALLOW_REROUTE` | unset | `1` accepts a proxy-served model that differs from the one requested, instead of failing |
 
 Alternate endpoints are just a different base URL and key — OpenRouter
 (`https://openrouter.ai/api/v1`, `ZRV_CLOUD_VLM_KEY_ENV=OPENROUTER_API_KEY`,
 e.g. `qwen/qwen3.7-flash` at $0.03/$0.13 per 1M tokens as of 2026-09-12) or
 Gemini direct (`https://generativelanguage.googleapis.com/v1beta/openai`).
 
+**Fail-closed on a silent reroute** (2026-09-12): a proxy can accept a request
+for one model and serve a different one — measured live, `claude-sonnet-4-6`
+came back served by `openai/gpt-oss-20b`, a text-only model, which then
+returned `ok:true` with a refusal sentence instead of an error. cloud-vlm now
+checks the response's `model` field against the one requested (normalizing
+provider prefixes and version/date suffixes) and fails `cloud_vlm_model_mismatch`
+when they differ, and independently scans the reply text for a non-vision
+refusal ("can't see the image", "no ability to view images", etc.), failing
+`cloud_vlm_no_vision` if it finds one — even when the model id happens to
+match. Both are exit code 3. Set `ZRV_CLOUD_VLM_ALLOW_REROUTE=1` to accept a
+rerouted model deliberately.
+
 Errors: `cloud_vlm_no_key`, `cloud_vlm_http_<status>`, `cloud_vlm_timeout`,
 `cloud_vlm_network`, `cloud_vlm_provider_error`, `cloud_vlm_bad_response`,
-`cloud_vlm_bad_input`, `cloud_vlm_too_large`, `cloud_vlm_empty`.
+`cloud_vlm_bad_input`, `cloud_vlm_too_large`, `cloud_vlm_empty`,
+`cloud_vlm_model_mismatch`, `cloud_vlm_no_vision`.
 Images only, 10 MB cap, no video, no clipboard. `costUsd` is reported only
 when the endpoint returns a cost; `tokens` whenever it returns usage.
 

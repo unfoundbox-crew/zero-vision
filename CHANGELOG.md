@@ -6,6 +6,31 @@ versioning follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- `cloud-vlm` no longer returns a fake `ok:true` when the LiteLLM proxy
+  silently reroutes the requested model to a different one. Found live
+  2026-09-12: a request for `claude-sonnet-4-6` came back served by
+  `openai/gpt-oss-20b`, a text-only model, which answered with a refusal
+  sentence instead of an error — exactly the shape `ok:true` was meant to
+  rule out. Two independent, fail-closed checks now run on every response:
+  the served `model` field is compared against the requested one (provider
+  prefixes like `openai/`/`anthropic/` and version/date suffixes normalized
+  away first) and a mismatch fails `cloud_vlm_model_mismatch` naming both
+  ids, unless `ZRV_CLOUD_VLM_ALLOW_REROUTE=1`; separately, the reply text is
+  scanned for a non-vision refusal ("can't see the image", "no ability to
+  view images", etc.) and fails `cloud_vlm_no_vision` if found — this one
+  fires even when the served model id matches, since a reroute could land on
+  another vision-capable model that still declines to look. Both map to exit
+  code 3 (engine unavailable), same as `cloud_vlm_no_key`. Hermetic tests for
+  both paths in `src/test/cloud-vlm.test.ts`. Re-run live against the exact
+  bug, same proxy, unmodified default config:
+  ```json
+  {"ok":false,"engine":"cloud-vlm","task":"describe","text":"","ms":27335,"model":"openai/gpt-oss-20b","error":"cloud_vlm_model_mismatch: requested \"claude-sonnet-4-6\" but the proxy served \"openai/gpt-oss-20b\"; set ZRV_CLOUD_VLM_ALLOW_REROUTE=1 to accept a rerouted model"}
+  ```
+  Confirms the proxy is still rerouting the default model as of this fix —
+  no model is currently verified working through it end to end; see
+  `docs/ARCHITECTURE.md` Known gaps.
+
 ### Changed
 - `cloud-vlm`'s default model is now `claude-sonnet-4-6`, not `gemini-3.7-flash`.
   2026-09-12: `gemini-3.7-flash` is out of daily quota (429) on Saurabh's proxy,

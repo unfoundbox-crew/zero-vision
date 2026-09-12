@@ -46,10 +46,19 @@ async function copyText(text: string): Promise<void> {
 }
 
 // 0 ok; 1 usage or "cannot describe"; 2 input/path missing; 3 engine unavailable
-// (weights, key, or binary missing); 4 any other engine failure. The named
-// `local_vlm_*` / `cloud_vlm_*` prefixes are the contract and are matched first;
-// the loose substrings below still cover the older engines' prose.
-const UNAVAILABLE = ["local_vlm_no_weights", "local_vlm_no_python", "local_vlm_no_runner", "cloud_vlm_no_key"];
+// (weights, key, or binary missing) — also where cloud-vlm lands when the
+// proxy rerouted the model or the model refused to look at the image, since
+// neither is a call the caller can retry as-is; 4 any other engine failure.
+// The named `local_vlm_*` / `cloud_vlm_*` prefixes are the contract and are
+// matched first; the loose substrings below still cover the older engines' prose.
+const UNAVAILABLE = [
+  "local_vlm_no_weights",
+  "local_vlm_no_python",
+  "local_vlm_no_runner",
+  "cloud_vlm_no_key",
+  "cloud_vlm_model_mismatch",
+  "cloud_vlm_no_vision",
+];
 const BAD_INPUT = /^(local|cloud)_vlm_bad_input: (input missing|path required)/;
 
 function failCode(result: PerceptionResult): number {

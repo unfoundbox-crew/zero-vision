@@ -81,6 +81,48 @@ interface ChatResponse {
   error?: { message?: string; code?: number | string };
 }
 
+// The proxy is a black box: it can silently reroute a requested model to a
+// different one (measured 2026-09-12: `claude-sonnet-4-6` came back served by
+// `openai/gpt-oss-20b`, a text-only model — and that text-only model returned
+// `ok:true` with a refusal sentence instead of an error, a fake green that
+// violates fail-closed). Two independent checks guard against it: the served
+// `model` id vs. the requested one, and the text itself for a non-vision
+// refusal — a reroute could in principle land on another vision-capable
+// model that still declines to look, which the id check alone would miss.
+function normalizeModelId(id: string): string {
+  // Strip a provider prefix ("openai/", "anthropic/", "google/", ...) and a
+  // trailing version/date-ish suffix, so "anthropic/claude-sonnet-4-6-20260101"
+  // compares equal to "claude-sonnet-4-6".
+  return id
+    .trim()
+    .toLowerCase()
+    .replace(/^[a-z0-9_-]+\//, "")
+    .replace(/[-_.]?(v?\d{4,}(-\d{2}-\d{2})?|\d+(\.\d+)+)$/, "")
+    .replace(/[-_.]+$/, "");
+}
+
+function modelsMatch(requested: string, served: string): boolean {
+  if (requested === served) return true;
+  return normalizeModelId(requested) === normalizeModelId(served);
+}
+
+const NO_VISION_PATTERNS = [
+  /can'?t see (the |this |an? )?image/i,
+  /cannot see (the |this |an? )?image/i,
+  /unable to (see|view) images?/i,
+  /(don'?t|do not) have the ability to (see|view) images?/i,
+  /cannot view images?/i,
+  /can'?t view images?/i,
+  /no (ability|capability) to (see|view|process) images?/i,
+  /not able to (see|view|process|analyze) images?/i,
+  /i('?m| am) (a |an )?text-only/i,
+  /i (do not|don'?t) have (vision|image) capabilit/i,
+];
+
+function looksLikeNoVisionRefusal(text: string): boolean {
+  return NO_VISION_PATTERNS.some((re) => re.test(text));
+}
+
 export const cloudVlm: Engine = {
   id: "cloud-vlm",
   capabilities: ["transcribe", "describe"],
@@ -209,6 +251,27 @@ export const cloudVlm: Engine = {
     const text = (parsed.choices?.[0]?.message?.content ?? "").trim();
     if (!text) {
       return fail(task, "cloud_vlm_empty: provider returned no text", Date.now() - t0, parsed.model ?? model);
+    }
+
+    const servedModel = parsed.model ?? model;
+    const allowReroute = process.env.ZRV_CLOUD_VLM_ALLOW_REROUTE === "1";
+    if (!allowReroute && !modelsMatch(model, servedModel)) {
+      return fail(
+        task,
+        `cloud_vlm_model_mismatch: requested "${model}" but the proxy served "${servedModel}"; ` +
+          "set ZRV_CLOUD_VLM_ALLOW_REROUTE=1 to accept a rerouted model",
+        Date.now() - t0,
+        servedModel,
+      );
+    }
+    if (looksLikeNoVisionRefusal(text)) {
+      return fail(
+        task,
+        `cloud_vlm_no_vision: "${servedModel}" refused to look at the image instead of returning an error ` +
+          `(reply: ${text.slice(0, 200).replace(/\s+/g, " ").trim()})`,
+        Date.now() - t0,
+        servedModel,
+      );
     }
 
     const usage = parsed.usage;
